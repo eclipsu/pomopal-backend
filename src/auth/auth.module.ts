@@ -10,6 +10,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import jwtConfig from './config/jwt.config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from 'src/entities/user.entity';
+import { RefreshJwtStrategy } from './strategies/refresh.strategy';
+import googleOauthConfig from './config/google-oauth.config';
+import { GoogleStrategy } from './strategies/google.strategy';
+import type { JwtModuleOptions } from '@nestjs/jwt';
+import type { StringValue } from 'ms';
 
 @Module({
   imports: [
@@ -18,26 +23,28 @@ import { User } from 'src/entities/user.entity';
     PassportModule.register({ defaultStrategy: 'jwt' }),
 
     ConfigModule.forFeature(jwtConfig),
+    ConfigModule.forFeature(googleOauthConfig),
 
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('jwt.secret');
-
-        if (!secret) {
-          throw new Error('JWT secret is not defined');
-        }
-
-        return {
-          secret,
-          signOptions: { expiresIn: '30d' },
-        };
-      },
+      useFactory: (config: ConfigService): JwtModuleOptions => ({
+        secret: config.get<string>('jwt.secret')!,
+        signOptions: {
+          expiresIn: config.get<string>('jwt.expiresIn') as StringValue,
+        },
+      }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, UserService, LocalStrategy, JwtStrategy],
+  providers: [
+    AuthService,
+    UserService,
+    LocalStrategy,
+    JwtStrategy,
+    RefreshJwtStrategy,
+    GoogleStrategy,
+  ],
   exports: [PassportModule, JwtModule],
 })
 export class AuthModule {}
