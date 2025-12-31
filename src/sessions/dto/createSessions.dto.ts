@@ -1,4 +1,4 @@
-import { IsEnum, IsInt } from 'class-validator';
+import { IsEnum, IsInt, Min } from 'class-validator';
 import { SessionType } from '../../entities/sessions.entity';
 
 export class CreateSessionDto {
@@ -6,5 +6,6 @@ export class CreateSessionDto {
   type: SessionType;
 
   @IsInt()
-  planned_seconds: number;
+  @Min(1)
+  planned_minutes: number;
 }

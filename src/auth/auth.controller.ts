@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/await-thenable */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
@@ -9,13 +10,13 @@ import {
   Request,
   UseGuards,
   Req,
+  Res,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import { RefreshAuthGuard } from './guards/refresh-auth/refresh-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth/google-auth.guard';
 import { Get } from '@nestjs/common';
-
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -40,9 +41,11 @@ export class AuthController {
 
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
-  async googleCallback(@Req() req, @Res() res): Promise<any> {
+  async googleCallback(@Req() req, @Res() res) {
     const resp = await this.authService.login(req.user.id);
-    // res.redirect(`http://localhost:3000/auth/success?token=${res.token}&refreshToken=${res.refreshToken}`);
-    return resp;
+    // console.log(resp);
+    res.redirect(
+      `http://localhost:3000/auth/success?token=${resp.token}&refreshToken=${resp.refreshToken}`,
+    );
   }
 }

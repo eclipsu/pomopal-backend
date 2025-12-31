@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   Controller,
   Get,
@@ -5,39 +6,39 @@ import {
   Post,
   Body,
   Patch,
-  ParseIntPipe,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { CreateSessionDto } from './dto/createSessions.dto';
-import { HeadersDto } from './dto/headers.dto';
-import { RequestHeader } from './pipes/requests-header';
 import { SessionsService } from './sessions.service';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth/jwt-auth.guard';
+import { Query } from '@nestjs/common';
 
+@UseGuards(JwtAuthGuard)
 @Controller('sessions')
 export class SessionsController {
   constructor(private sessionsService: SessionsService) {}
 
-  @Get()
-  findAll() {
-    return this.sessionsService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.sessionsService.findOne(id);
-  }
-
   @Post()
-  create(@Body() dto: CreateSessionDto) {
-    return this.sessionsService.create(dto);
+  start(@Req() req: any, @Body() dto: CreateSessionDto): any {
+    console.log(req.user.sub, dto);
+    return this.sessionsService.start(req.user.sub, dto);
   }
 
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() body: CreateSessionDto,
-    @RequestHeader(HeadersDto) headers: HeadersDto,
+  @Get()
+  list(
+    @Req() req: any,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
-    console.log(headers);
-    return 'Update session';
+    return this.sessionsService.list(req.user.sub, {
+      limit: limit ? parseInt(limit) : undefined,
+      offset: offset ? parseInt(offset) : undefined,
+    });
+  }
+
+  @Patch(':id/complete')
+  complete(@Req() req: any, @Param('id') id: string) {
+    return this.sessionsService.complete(req.user.sub, id);
   }
 }

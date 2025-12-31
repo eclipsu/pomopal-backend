@@ -2,14 +2,18 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
+  OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Session } from './sessions.entity';
+import { DailyStat } from './daily-stat.entity';
+import { Streak } from './streak.entity';
 
 @Entity('users')
 export class User {
-  @PrimaryGeneratedColumn('increment')
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column()
   name: string;
@@ -19,9 +23,6 @@ export class User {
 
   @Column()
   password_hash: string;
-
-  @Column()
-  timezone: string;
 
   @Column({ default: 25 })
   pomodoro_minutes: number;
@@ -33,7 +34,16 @@ export class User {
   long_break_minutes: number;
 
   @Column({ nullable: true })
-  avatar_url: string;
+  avatar_url?: string;
+
+  @OneToMany(() => Session, (s) => s.user)
+  sessions: Session[];
+
+  @OneToMany(() => DailyStat, (d) => d.user)
+  daily_stats: DailyStat[];
+
+  @OneToMany(() => Streak, (s) => s.user)
+  streaks: Streak[];
 
   @CreateDateColumn()
   created_at: Date;

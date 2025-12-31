@@ -2,8 +2,11 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
+  ManyToOne,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
+import { User } from './user.entity';
 
 export enum SessionType {
   POMODORO = 'pomodoro',
@@ -12,26 +15,30 @@ export enum SessionType {
 }
 
 @Entity('sessions')
+@Index(['user', 'started_at'])
 export class Session {
-  @PrimaryGeneratedColumn('increment')
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => User, (u) => u.sessions, { onDelete: 'CASCADE' })
+  user: User;
 
   @Column({ type: 'enum', enum: SessionType })
   type: SessionType;
 
   @Column()
-  planned_seconds: number;
+  planned_duration_minutes: number;
 
-  @Column()
-  actual_seconds: number;
+  @Column({ nullable: true })
+  actual_duration_minutes?: number;
 
   @Column()
   started_at: Date;
 
   @Column({ nullable: true })
-  ended_at: Date;
+  ended_at?: Date;
 
-  @Column()
+  @Column({ default: false })
   completed: boolean;
 
   @CreateDateColumn()
