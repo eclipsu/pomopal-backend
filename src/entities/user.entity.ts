@@ -36,6 +36,9 @@ export class User {
   @Column({ nullable: true })
   avatar_url?: string;
 
+  @Column({ default: 'America/Chicago' })
+  time_zone: string;
+
   @OneToMany(() => Session, (s) => s.user)
   sessions: Session[];
 

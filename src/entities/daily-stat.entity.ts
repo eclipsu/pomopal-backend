@@ -18,8 +18,5 @@ export class DailyStat {
   total_focus_minutes: number;
 
   @Column({ default: 0 })
-  total_break_minutes: number;
-
-  @Column({ default: 0 })
   session_count: number;
 }
