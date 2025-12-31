@@ -6,11 +6,13 @@ import { DailyStat } from 'src/entities/daily-stat.entity';
 import { Session } from 'src/entities/sessions.entity';
 import { Between, Repository } from 'typeorm';
 import { toUserDate } from '../common/time';
+import { StreaksService } from 'src/streaks/streaks.service';
 
 @Injectable()
 export class DailyStatsService {
   constructor(
     @InjectRepository(DailyStat) private dailyStatRepo: Repository<DailyStat>,
+    private readonly streaks: StreaksService,
   ) {}
 
   async getDailyStat(userId: string, date: string): Promise<DailyStat | null> {
@@ -48,6 +50,7 @@ export class DailyStatsService {
     }
 
     stat.total_focus_minutes += session.actual_duration_minutes!;
+    await this.streaks.update(session.user, date);
     stat.session_count += 1;
     stat.date = date;
 

@@ -9,11 +9,13 @@ import { Repository } from 'typeorm';
 import { Session } from '../entities/sessions.entity';
 import { SessionResponseDto } from './dto/response-dto';
 import { DailyStatsService } from 'src/daily-stats/daily-stats.service';
+import { User } from 'src/entities/user.entity';
 
 @Injectable()
 export class SessionsService {
   constructor(
     @InjectRepository(Session) private sessionRepo: Repository<Session>,
+    @InjectRepository(User) private userRepo: Repository<User>,
     private readonly dailyStatsService: DailyStatsService,
   ) {}
   findAll() {
@@ -38,6 +40,8 @@ export class SessionsService {
       where: { id: sessionId },
       relations: ['user'],
     });
+
+    console.log(session);
 
     if (!session || session.user.id !== userId) {
       throw new NotFoundException();

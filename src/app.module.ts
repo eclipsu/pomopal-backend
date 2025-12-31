@@ -8,6 +8,7 @@ import { ConfigModule } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { DailyStatsModule } from './daily-stats/daily-stats.module';
+import { StreaksModule } from './streaks/streaks.module';
 import jwtConfig from './auth/config/jwt.config';
 
 @Module({
@@ -20,6 +21,7 @@ import jwtConfig from './auth/config/jwt.config';
     UserModule,
     AuthModule,
     DailyStatsModule,
+    StreaksModule,
   ],
   controllers: [AppController],
   providers: [AppService],
