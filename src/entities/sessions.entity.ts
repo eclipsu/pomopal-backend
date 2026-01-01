@@ -32,10 +32,10 @@ export class Session {
   @Column({ nullable: true })
   actual_duration_minutes?: number;
 
-  @Column()
+  @Column({ type: 'timestamptz', nullable: true })
   started_at: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   ended_at?: Date;
 
   @Column({ default: false })

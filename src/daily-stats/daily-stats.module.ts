@@ -4,9 +4,14 @@ import { DailyStatsController } from './daily-stats.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DailyStat } from 'src/entities/daily-stat.entity';
 import { StreaksModule } from 'src/streaks/streaks.module';
+import { User } from 'src/entities/user.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DailyStat]), StreaksModule],
+  imports: [
+    TypeOrmModule.forFeature([DailyStat]),
+    TypeOrmModule.forFeature([User]),
+    StreaksModule,
+  ],
   controllers: [DailyStatsController],
   providers: [DailyStatsService],
   exports: [DailyStatsService],

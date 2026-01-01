@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/require-await */
 import { Injectable } from '@nestjs/common';
@@ -7,19 +8,34 @@ import { Session } from 'src/entities/sessions.entity';
 import { Between, Repository } from 'typeorm';
 import { toUserDate } from '../common/time';
 import { StreaksService } from 'src/streaks/streaks.service';
+import { User } from 'src/entities/user.entity';
 
 @Injectable()
 export class DailyStatsService {
   constructor(
     @InjectRepository(DailyStat) private dailyStatRepo: Repository<DailyStat>,
+    @InjectRepository(User) private userRepo: Repository<User>,
     private readonly streaks: StreaksService,
   ) {}
 
   async getDailyStat(userId: string, date: string): Promise<DailyStat | null> {
+    let queryDate = date;
+
+    if (!queryDate) {
+      const user = await this.userRepo.findOne({
+        where: { id: userId },
+        select: ['time_zone'],
+      });
+
+      const tz = user?.time_zone ?? 'UTC';
+      queryDate = toUserDate(new Date(), tz);
+    }
+
+    if (!date) queryDate = toUserDate(new Date(), 'UTC');
     return await this.dailyStatRepo.findOne({
       where: {
         user: { id: userId },
-        date: date,
+        date: queryDate,
       },
     });
   }
