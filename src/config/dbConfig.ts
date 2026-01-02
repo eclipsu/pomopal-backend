@@ -9,7 +9,7 @@ export default (): PostgresConnectionOptions => ({
   // username: process.env.DB_USER,
   // password: process.env.DB_PASSWORD,
   // database: process.env.DB_NAME,
-  url: process.env.DATABASE_URL,
+  url: 'postgresql://neondb_owner:npg_9oxSVmrI2Yas@ep-plain-cake-adulxic4-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
   // synchronize: true,
   migrationsRun: true,
   ssl: { rejectUnauthorized: false },
