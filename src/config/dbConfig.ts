@@ -1,5 +1,7 @@
 import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions.js';
 
+console.log('DATABASE_URL at runtime:', process.env.DATABASE_URL);
+
 export default (): PostgresConnectionOptions => ({
   type: 'postgres',
   // host: process.env.DB_HOST,
@@ -8,9 +10,9 @@ export default (): PostgresConnectionOptions => ({
   // password: process.env.DB_PASSWORD,
   // database: process.env.DB_NAME,
   url: process.env.DATABASE_URL,
-  synchronize: true,
+  // synchronize: true,
   migrationsRun: true,
-  ssl: true,
+  ssl: { rejectUnauthorized: false },
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
 });
