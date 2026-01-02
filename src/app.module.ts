@@ -14,10 +14,10 @@ import jwtConfig from './auth/config/jwt.config';
 @Module({
   imports: [
     SessionsModule,
+    ConfigModule.forRoot({ isGlobal: true, load: [dbConfig, jwtConfig] }),
     TypeOrmModule.forRootAsync({
       useFactory: dbConfig,
     }),
-    ConfigModule.forRoot({ isGlobal: true, load: [dbConfig, jwtConfig] }),
     UserModule,
     AuthModule,
     DailyStatsModule,
