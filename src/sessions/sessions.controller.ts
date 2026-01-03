@@ -21,7 +21,6 @@ export class SessionsController {
 
   @Post()
   start(@Req() req: any, @Body() dto: CreateSessionDto): any {
-    console.log(req.user.sub, dto);
     return this.sessionsService.start(req.user.sub, dto);
   }
 

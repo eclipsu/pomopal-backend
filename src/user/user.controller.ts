@@ -37,7 +37,6 @@ export class UserController {
 
   @Get('profile')
   getProfile(@Req() req: AuthRequest) {
-    console.log('HELLo', req.user);
     return this.userService.findOne(String(req.user.sub));
   }
 

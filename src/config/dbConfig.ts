@@ -1,7 +1,6 @@
 import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions.js';
 
-console.log('DATABASE_URL at runtime:', process.env.DATABASE_URL);
-
+const isDevelopment = process.env.NODE_ENV === 'development';
 export default (): PostgresConnectionOptions => ({
   type: 'postgres',
   // host: process.env.DB_HOST,
@@ -9,10 +8,10 @@ export default (): PostgresConnectionOptions => ({
   // username: process.env.DB_USER,
   // password: process.env.DB_PASSWORD,
   // database: process.env.DB_NAME,
-  url: 'postgresql://neondb_owner:npg_9oxSVmrI2Yas@ep-plain-cake-adulxic4-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+  url: process.env.DATABASE_URL,
   // synchronize: true,
   migrationsRun: true,
-  ssl: { rejectUnauthorized: false },
+  ssl: isDevelopment ? false : { rejectUnauthorized: false },
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
 });

@@ -41,8 +41,6 @@ export class SessionsService {
       relations: ['user'],
     });
 
-    console.log(session);
-
     if (!session || session.user.id !== userId) {
       throw new NotFoundException();
     }

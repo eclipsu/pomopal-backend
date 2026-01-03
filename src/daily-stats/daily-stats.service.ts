@@ -9,6 +9,7 @@ import { Between, Repository } from 'typeorm';
 import { toUserDate } from '../common/time';
 import { StreaksService } from 'src/streaks/streaks.service';
 import { User } from 'src/entities/user.entity';
+import { DailyStatDto } from './dto/daily-stat.dto.ts';
 
 @Injectable()
 export class DailyStatsService {
@@ -18,7 +19,7 @@ export class DailyStatsService {
     private readonly streaks: StreaksService,
   ) {}
 
-  async getDailyStat(userId: string, date: string): Promise<DailyStat | null> {
+  async getDailyStat(userId: string, date?: string): Promise<DailyStatDto> {
     let queryDate = date;
 
     if (!queryDate) {
@@ -26,28 +27,61 @@ export class DailyStatsService {
         where: { id: userId },
         select: ['time_zone'],
       });
-
       const tz = user?.time_zone ?? 'UTC';
       queryDate = toUserDate(new Date(), tz);
     }
 
-    if (!date) queryDate = toUserDate(new Date(), 'UTC');
-    return await this.dailyStatRepo.findOne({
+    const stats = await this.dailyStatRepo.findOne({
       where: {
         user: { id: userId },
         date: queryDate,
       },
     });
+
+    if (stats) return stats;
+
+    return {
+      date: queryDate,
+      total_focus_minutes: 0,
+      session_count: 0,
+    };
   }
 
-  async getRange(userId: string, from: string, to: string) {
-    return this.dailyStatRepo.find({
+  async getRange(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<DailyStatDto[]> {
+    const existingStats = await this.dailyStatRepo.find({
       where: {
         user: { id: userId },
         date: Between(from, to),
       },
       order: { date: 'ASC' },
     });
+
+    const statsMap = new Map(existingStats.map((s) => [s.date, s]));
+    const results: DailyStat[] = [];
+
+    const start = new Date(from);
+    const end = new Date(to);
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().split('T')[0];
+      const existing = statsMap.get(dateStr);
+
+      if (existing) {
+        results.push(existing);
+      } else {
+        results.push({
+          date: dateStr,
+          total_focus_minutes: 0,
+          session_count: 0,
+        } as DailyStat);
+      }
+    }
+
+    return results;
   }
 
   async applySession(session: Session, userTimeZone: string) {

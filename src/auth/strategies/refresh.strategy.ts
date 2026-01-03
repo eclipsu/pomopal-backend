@@ -12,8 +12,6 @@ export class RefreshJwtStrategy extends PassportStrategy(
   constructor(config: ConfigService) {
     const secret = config.get<string>('jwt.secretRefresh');
 
-    console.log('JWT STRATEGY CONSTRUCTOR');
-
     if (!secret) {
       throw new Error('JWT secret is not defined');
     }
