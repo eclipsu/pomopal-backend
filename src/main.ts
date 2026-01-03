@@ -10,6 +10,12 @@ async function bootstrap() {
 
   (app.getHttpAdapter().getInstance() as any).set('trust proxy', 1);
 
+  app.enableCors({
+    origin: 'https://pomopal.vercel.app',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
+
   const port = Number(process.env.PORT) || 8000;
   await app.listen(port, '0.0.0.0');
   console.log(`Server running on port ${port}`);
