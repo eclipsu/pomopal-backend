@@ -18,10 +18,14 @@ import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import { RefreshAuthGuard } from './guards/refresh-auth/refresh-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth/google-auth.guard';
+import { ConfigService } from '@nestjs/config';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   private setTokenCookies(res: Response, token: string, refreshToken?: string) {
     res.cookie('access_token', token, {
@@ -68,6 +72,9 @@ export class AuthController {
   async googleCallback(@Req() req, @Res() res: Response) {
     const { token, refreshToken } = await this.authService.login(req.user.id);
     this.setTokenCookies(res, token, refreshToken);
-    res.redirect('http://localhost:3000/success'); // no tokens in URL
+    const redirectTo =
+      this.configService.get<string>('FRONTEND_URL') ||
+      'http://localhost:3000/success';
+    res.redirect(redirectTo);
   }
 }

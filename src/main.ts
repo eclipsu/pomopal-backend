@@ -17,10 +17,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const port = Number(process.env.PORT) || 8000;
   app.use(cookieParser());
-  await app.listen(port, '0.0.0.0');
-  console.log(`Server running on port ${port}`);
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -29,6 +26,10 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  const port = Number(process.env.PORT) || 8000;
+  await app.listen(port, '0.0.0.0');
+  console.log(`Server running on port ${port}`);
 }
 
 bootstrap();

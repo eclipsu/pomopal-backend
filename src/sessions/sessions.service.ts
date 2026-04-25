@@ -24,6 +24,7 @@ export class SessionsService {
 
   // this is to start a session
   async start(userId: string, dto: CreateSessionDto) {
+    console.log(dto);
     const session = this.sessionRepo.create({
       user: { id: userId },
       type: dto.type,
