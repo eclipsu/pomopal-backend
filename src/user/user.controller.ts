@@ -18,7 +18,6 @@ import { Req } from '@nestjs/common';
 import type { AuthRequest } from './interface/auth-request';
 import { TimezoneDto } from './dto/update-timezone.dto';
 // import { UpdateUserDto } from './dto/update-user.dto';
-@UseGuards(JwtAuthGuard)
 @Controller('user')
 @UsePipes(
   new ValidationPipe({
@@ -35,22 +34,26 @@ export class UserController {
     return this.userService.create(createUserDto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Get('profile')
   getProfile(@Req() req: AuthRequest) {
     return this.userService.findOne(String(req.user.sub));
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   findAll() {
     return this.userService.findAll();
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {
     return this.userService.findOne(id);
   }
 
   @HttpCode(201)
+  @UseGuards(JwtAuthGuard)
   @Patch('timezone')
   updateTimezone(@Req() req: any, @Body() dto: TimezoneDto) {
     return this.userService.updateTimezone(String(req.user.sub), dto);
@@ -60,6 +63,7 @@ export class UserController {
   // update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
   //   return this.userService.update(+id, updateUserDto);
   // }
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.userService.remove(+id);
