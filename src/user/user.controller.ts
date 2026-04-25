@@ -18,6 +18,8 @@ import { Req } from '@nestjs/common';
 import type { AuthRequest } from './interface/auth-request';
 import { TimezoneDto } from './dto/update-timezone.dto';
 // import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserSettingsDto } from './dto/update-settings.dto';
+
 @Controller('user')
 @UsePipes(
   new ValidationPipe({
@@ -67,5 +69,11 @@ export class UserController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.userService.remove(+id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('settings')
+  updatePreferences(@Req() req: any, @Body() dto: UpdateUserSettingsDto) {
+    return this.userService.updatePreferences(String(req.user.sub), dto);
   }
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Injectable } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -6,6 +7,7 @@ import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { TimezoneDto } from './dto/update-timezone.dto';
+import { UpdateUserSettingsDto } from './dto/update-settings.dto';
 
 @Injectable()
 export class UserService {
@@ -52,5 +54,25 @@ export class UserService {
 
   remove(id: number) {
     return `This action removes a #${id} user`;
+  }
+
+  async updatePreferences(id: string, dto: UpdateUserSettingsDto) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.userRepo.update(
+      { id },
+      {
+        ...(dto.pomodoro_minutes && { pomodoro_minutes: dto.pomodoro_minutes }),
+        ...(dto.short_break_minutes && {
+          short_break_minutes: dto.short_break_minutes,
+        }),
+        ...(dto.long_break_minutes && {
+          long_break_minutes: dto.long_break_minutes,
+        }),
+      },
+    );
+
+    return this.findOne(id);
   }
 }
