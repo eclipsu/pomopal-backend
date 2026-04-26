@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthJwtPayload } from '../types/auth-jwtPayload';
+import { Request } from 'express';
 
 @Injectable()
 export class RefreshJwtStrategy extends PassportStrategy(
@@ -13,14 +15,13 @@ export class RefreshJwtStrategy extends PassportStrategy(
     const secret = config.get<string>('jwt.secretRefresh');
 
     if (!secret) {
-      throw new Error('JWT secret is not defined');
+      throw new Error('JWT refresh secret is not defined');
     }
 
     super({
-      jwtFromRequest: (req) => {
-        const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-        return token;
-      },
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request) => req?.cookies?.['refresh_token'] ?? null,
+      ]),
       secretOrKey: secret,
     });
   }
