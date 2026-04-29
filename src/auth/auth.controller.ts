@@ -49,7 +49,7 @@ export class AuthController {
   @UseGuards(AuthGuard('local'))
   @Post('login')
   login(@Request() req, @Res({ passthrough: true }) res: Response) {
-    const { id, token, refreshToken } = this.authService.login(req.user.id);
+    const { id, token, refreshToken } = this.authService.login(req.user.sub);
     this.setTokenCookies(res, token, refreshToken);
     return { id }; // never expose tokens in the body
   }
@@ -58,7 +58,7 @@ export class AuthController {
   @UseGuards(RefreshAuthGuard)
   @Post('refresh')
   refreshToken(@Req() req, @Res({ passthrough: true }) res: Response) {
-    const { id, token } = this.authService.refreshToken(req.user.id);
+    const { id, token } = this.authService.refreshToken(req.user.sub);
     this.setTokenCookies(res, token);
     return { id };
   }
@@ -70,7 +70,7 @@ export class AuthController {
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
   async googleCallback(@Req() req, @Res() res: Response) {
-    const { token, refreshToken } = await this.authService.login(req.user.id);
+    const { token, refreshToken } = await this.authService.login(req.user.sub);
     this.setTokenCookies(res, token, refreshToken);
     const redirectTo =
       this.configService.get<string>('FRONTEND_URL') ||
