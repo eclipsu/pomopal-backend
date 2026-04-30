@@ -15,15 +15,6 @@ services:
     build: .
     container_name: nest_app
     restart: always
-    depends_on:
-      - db
-    environment:
-      NODE_ENV: production
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: password
-      DB_NAME: pomopal
     command: node dist/main.js
 
   nginx:
