@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   db:
     image: postgres:15
@@ -9,8 +8,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: pomopal
-    ports:
-      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -20,8 +17,6 @@ services:
     restart: always
     depends_on:
       - db
-    ports:
-      - '3000:3000'
     environment:
       NODE_ENV: production
       DB_HOST: db
@@ -30,6 +25,17 @@ services:
       DB_PASSWORD: password
       DB_NAME: pomopal
     command: node dist/main.js
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: always
+    ports:
+      - '80:80'
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - app
 
 volumes:
   pgdata:
