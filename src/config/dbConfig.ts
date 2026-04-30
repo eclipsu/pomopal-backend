@@ -11,7 +11,7 @@ export default (): PostgresConnectionOptions => ({
   url: process.env.DATABASE_URL,
   synchronize: true,
   migrationsRun: true,
-  // ssl: isDevelopment ? false : { rejectUnauthorized: false },
+  ssl: isDevelopment ? false : { rejectUnauthorized: false },
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
 });
