@@ -32,7 +32,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000, // 15 minutes — match your jwt.expiresIn
+      maxAge: 15 * 60 * 1000,
     });
 
     if (refreshToken) {
@@ -40,7 +40,7 @@ export class AuthController {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days — match jwt.secretRefresh expiresIn
+        maxAge: 30 * 24 * 60 * 60 * 1000,
       });
     }
   }
@@ -51,7 +51,25 @@ export class AuthController {
   login(@Request() req, @Res({ passthrough: true }) res: Response) {
     const { id, token, refreshToken } = this.authService.login(req.user.id);
     this.setTokenCookies(res, token, refreshToken);
-    return { id }; // never expose tokens in the body
+    return { id };
+  }
+  @Post('logout')
+  logout(@Req() req: Request, @Res() res: Response) {
+    console.log('HIT!');
+    const cookiesToClear = ['access_token', 'refresh_token'];
+
+    cookiesToClear.forEach((name) => {
+      res.clearCookie(name, {
+        path: '/',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
+    });
+
+    return res.status(200).json({
+      message: 'Logged out and cookies cleared',
+    });
   }
 
   @HttpCode(HttpStatus.OK)
