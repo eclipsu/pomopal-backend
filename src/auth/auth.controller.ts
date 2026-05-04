@@ -55,7 +55,6 @@ export class AuthController {
   }
   @Post('logout')
   logout(@Req() req: Request, @Res() res: Response) {
-    console.log('HIT!');
     const cookiesToClear = ['access_token', 'refresh_token'];
 
     cookiesToClear.forEach((name) => {

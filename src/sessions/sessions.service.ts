@@ -6,11 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreateSessionDto } from './dto/createSessions.dto';
 import { Repository } from 'typeorm';
-import { Session } from '../entities/sessions.entity';
+import { Session, SessionType } from '../entities/sessions.entity';
 import { SessionResponseDto } from './dto/response-dto';
 import { DailyStatsService } from 'src/daily-stats/daily-stats.service';
 import { User } from 'src/entities/user.entity';
-
 @Injectable()
 export class SessionsService {
   constructor(
@@ -58,7 +57,12 @@ export class SessionsService {
     session.actual_duration_minutes = session.planned_duration_minutes;
     session.ended_at = new Date();
 
-    await this.dailyStatsService.applySession(session, session.user.time_zone);
+    if (session.type === SessionType.POMODORO) {
+      await this.dailyStatsService.applySession(
+        session,
+        session.user.time_zone,
+      );
+    }
     return this.toResponse(await this.sessionRepo.save(session));
   }
 
