@@ -4,6 +4,7 @@ import { SessionsService } from './sessions.service';
 import { Session } from 'src/entities/sessions.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DailyStatsModule } from 'src/daily-stats/daily-stats.module';
+import { StreaksModule } from 'src/streaks/streaks.module';
 import { User } from 'src/entities/user.entity';
 
 @Module({
@@ -11,6 +12,7 @@ import { User } from 'src/entities/user.entity';
     TypeOrmModule.forFeature([Session]),
     TypeOrmModule.forFeature([User]),
     DailyStatsModule,
+    StreaksModule,
   ],
   controllers: [SessionsController],
   providers: [SessionsService],

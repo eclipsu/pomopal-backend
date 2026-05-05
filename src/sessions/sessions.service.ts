@@ -9,13 +9,17 @@ import { Repository } from 'typeorm';
 import { Session, SessionType } from '../entities/sessions.entity';
 import { SessionResponseDto } from './dto/response-dto';
 import { DailyStatsService } from 'src/daily-stats/daily-stats.service';
+import { StreaksService } from 'src/streaks/streaks.service';
 import { User } from 'src/entities/user.entity';
+import { toUserDate } from '../common/time';
+
 @Injectable()
 export class SessionsService {
   constructor(
     @InjectRepository(Session) private sessionRepo: Repository<Session>,
     @InjectRepository(User) private userRepo: Repository<User>,
     private readonly dailyStatsService: DailyStatsService,
+    private readonly streakService: StreaksService,
   ) {}
   findAll() {
     return 'This action returns all sessions';
@@ -23,7 +27,6 @@ export class SessionsService {
 
   // this is to start a session
   async start(userId: string, dto: CreateSessionDto) {
-    console.log(dto);
     const session = this.sessionRepo.create({
       user: { id: userId },
       type: dto.type,
@@ -31,6 +34,9 @@ export class SessionsService {
       started_at: new Date(),
       completed: false,
     });
+
+    const date: string = toUserDate(session.started_at, session.user.time_zone);
+    await this.streakService.update(session.user, date);
     return await this.sessionRepo.save(session);
   }
 

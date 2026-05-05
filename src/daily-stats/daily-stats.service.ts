@@ -100,7 +100,6 @@ export class DailyStatsService {
     }
 
     stat.total_focus_minutes += session.actual_duration_minutes!;
-    await this.streaks.update(session.user, date);
     stat.session_count += 1;
     stat.date = date;
 
