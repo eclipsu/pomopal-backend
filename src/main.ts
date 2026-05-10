@@ -32,4 +32,8 @@ async function bootstrap() {
   console.log(`Server running on port ${port}`);
 }
 
+process.on('unhandledRejection', (reason) => {
+  console.error('FULL TRACE:', reason);
+});
+
 bootstrap();

@@ -18,7 +18,7 @@ import { AcceptFriendInviteDto } from './dto/accept-friendship.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth/jwt-auth.guard';
 
 interface AuthRequest extends Request {
-  user: { id: string };
+  user: { sub: string };
 }
 
 @Controller('friends')
@@ -32,7 +32,7 @@ export class FriendshipController {
     @Req() req: AuthRequest,
     @Body() dto: SendFriendInviteDto,
   ): Promise<void> {
-    await this.friendshipService.sendInvite(req.user.id, dto);
+    await this.friendshipService.sendInvite(req.user.sub, dto);
   }
 
   @Post('accept')
@@ -40,7 +40,7 @@ export class FriendshipController {
     @Req() req: AuthRequest,
     @Body() dto: AcceptFriendInviteDto,
   ) {
-    return this.friendshipService.acceptInvite(dto.token, req.user.id);
+    return this.friendshipService.acceptInvite(dto.token, req.user.sub);
   }
 
   /**
@@ -49,7 +49,7 @@ export class FriendshipController {
    */
   @Get()
   async listFriends(@Req() req: AuthRequest) {
-    return this.friendshipService.listFriends(req.user.id);
+    return this.friendshipService.listFriends(req.user.sub);
   }
 
   /**
@@ -58,7 +58,7 @@ export class FriendshipController {
    */
   @Get('requests/received')
   async pendingReceived(@Req() req: AuthRequest) {
-    return this.friendshipService.listPendingReceived(req.user.id);
+    return this.friendshipService.listPendingReceived(req.user.sub);
   }
 
   /**
@@ -67,7 +67,7 @@ export class FriendshipController {
    */
   @Get('requests/sent')
   async pendingSent(@Req() req: AuthRequest) {
-    return this.friendshipService.listPendingSent(req.user.id);
+    return this.friendshipService.listPendingSent(req.user.sub);
   }
 
   /**
@@ -79,7 +79,7 @@ export class FriendshipController {
     @Req() req: AuthRequest,
     @Param('id', ParseUUIDPipe) friendId: string,
   ) {
-    return this.friendshipService.getFriendProfile(req.user.id, friendId);
+    return this.friendshipService.getFriendProfile(req.user.sub, friendId);
   }
 
   /**
@@ -92,7 +92,7 @@ export class FriendshipController {
     @Req() req: AuthRequest,
     @Param('id', ParseUUIDPipe) friendId: string,
   ): Promise<void> {
-    await this.friendshipService.unfriend(req.user.id, friendId);
+    await this.friendshipService.unfriend(req.user.sub, friendId);
   }
 
   /**
@@ -105,6 +105,6 @@ export class FriendshipController {
     @Req() req: AuthRequest,
     @Param('id', ParseUUIDPipe) targetId: string,
   ): Promise<void> {
-    await this.friendshipService.block(req.user.id, targetId);
+    await this.friendshipService.block(req.user.sub, targetId);
   }
 }

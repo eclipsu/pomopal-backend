@@ -8,7 +8,7 @@ import { UpdatePrivacyDto } from './dto/update-privacy.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth/jwt-auth.guard';
 
 interface AuthRequest extends Request {
-  user: { id: string };
+  user: { sub: string };
 }
 
 @Controller('privacy')
@@ -22,7 +22,7 @@ export class PrivacyController {
    */
   @Get()
   async getPrivacy(@Req() req: AuthRequest) {
-    return this.privacyService.getPrivacy(req.user.id);
+    return this.privacyService.getPrivacy(req.user.sub);
   }
 
   /**
@@ -31,6 +31,6 @@ export class PrivacyController {
    */
   @Patch()
   async updatePrivacy(@Req() req: AuthRequest, @Body() dto: UpdatePrivacyDto) {
-    return this.privacyService.updatePrivacy(req.user.id, dto);
+    return this.privacyService.updatePrivacy(req.user.sub, dto);
   }
 }

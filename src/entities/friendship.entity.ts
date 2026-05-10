@@ -12,24 +12,18 @@ import { User } from './user.entity';
 export type FriendshipStatus = 'pending' | 'accepted' | 'blocked';
 
 @Entity('friendships')
-@Index(['requester_id', 'addressee_id'], { unique: true })
+@Index('IDX_friendship_pair', ['requester', 'addressee'], { unique: true })
 export class Friendship {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column('uuid')
-  requester_id!: string;
-
-  @Column({ type: 'uuid', nullable: true })
-  addressee_id!: string | null;
-
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { onDelete: 'CASCADE', eager: false })
   @JoinColumn({ name: 'requester_id' })
   requester!: User;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL', eager: false })
   @JoinColumn({ name: 'addressee_id' })
-  addressee!: User;
+  addressee!: User | null;
 
   @Column({ type: 'varchar', default: 'pending' })
   status!: FriendshipStatus;

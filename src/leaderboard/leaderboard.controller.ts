@@ -5,7 +5,7 @@ import type { LeaderboardPeriod } from './leaderboard.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth/jwt-auth.guard';
 
 interface AuthRequest extends Request {
-  user: { id: string };
+  user: { sub: string };
 }
 
 @Controller('leaderboard')
@@ -23,6 +23,6 @@ export class LeaderboardController {
     @Req() req: AuthRequest,
     @Query('period') period: LeaderboardPeriod = 'week',
   ) {
-    return this.leaderboardService.getFriendLeaderboard(req.user.id, period);
+    return this.leaderboardService.getFriendLeaderboard(req.user.sub, period);
   }
 }

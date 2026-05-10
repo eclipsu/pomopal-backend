@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -49,6 +50,8 @@ export class FriendshipService {
     requesterId: string,
     dto: SendFriendInviteDto,
   ): Promise<void> {
+    console.log('sendInvite called', requesterId, dto);
+
     const requester = await this.userRepo.findOneByOrFail({ id: requesterId });
 
     if (requester.email === dto.email) {
@@ -80,8 +83,8 @@ export class FriendshipService {
     }
 
     const friendship = this.friendshipRepo.create({
-      requester_id: requesterId,
-      addressee_id: addressee?.id ?? null,
+      requester: { id: requesterId },
+      addressee: addressee ? { id: addressee.id } : null,
       status: 'pending',
     });
 
@@ -144,11 +147,10 @@ export class FriendshipService {
     if (
       !friendship.invite_token_expires_at ||
       friendship.invite_token_expires_at < new Date()
-    ) {
+    )
       throw new BadRequestException(
         'This invite link has expired. Ask your friend to resend.',
       );
-    }
 
     const acceptingUser = await this.userRepo.findOneByOrFail({
       id: acceptingUserId,
@@ -160,19 +162,26 @@ export class FriendshipService {
     }
 
     return this.dataSource.transaction(async (em) => {
-      const updated = await em.save(Friendship, {
-        ...friendship,
-        addressee_id: acceptingUserId,
+      await em.update(Friendship, friendship.id, {
         status: 'accepted',
         invite_token: null,
         invite_token_expires_at: null,
         accepted_at: new Date(),
       });
 
-      await this.ensurePrivacy(em, friendship.requester_id);
+      await em
+        .createQueryBuilder()
+        .relation(Friendship, 'addressee')
+        .of(friendship.id)
+        .set(acceptingUserId);
+
+      await this.ensurePrivacy(em, friendship.requester.id);
       await this.ensurePrivacy(em, acceptingUserId);
 
-      return updated;
+      return em.findOneOrFail(Friendship, {
+        where: { id: friendship.id },
+        relations: ['requester', 'addressee'],
+      });
     });
   }
 
@@ -190,16 +199,14 @@ export class FriendshipService {
     if (existing) {
       await this.friendshipRepo.update(existing.id, {
         status: 'blocked',
-        requester_id: userId,
-        addressee_id: targetId,
         invite_token: null,
         invite_token_expires_at: null,
       });
     } else {
       await this.friendshipRepo.save(
         this.friendshipRepo.create({
-          requester_id: userId,
-          addressee_id: targetId,
+          requester: { id: userId },
+          addressee: { id: targetId },
           status: 'blocked',
         }),
       );
@@ -212,14 +219,14 @@ export class FriendshipService {
       .leftJoinAndSelect('f.requester', 'requester')
       .leftJoinAndSelect('f.addressee', 'addressee')
       .where('f.status = :status', { status: 'accepted' })
-      .andWhere('(f.requester_id = :uid OR f.addressee_id = :uid)', {
-        uid: userId,
-      })
+      .andWhere('(requester.id = :uid OR addressee.id = :uid)', { uid: userId })
       .getMany();
 
     const friendIds = friendships
-      .map((f) => (f.requester_id === userId ? f.addressee_id : f.requester_id))
-      .filter((id): id is string => id !== null);
+      .map((f) =>
+        f.requester?.id === userId ? f.addressee?.id : f.requester?.id,
+      )
+      .filter((id): id is string => !!id);
 
     if (!friendIds.length) return [];
 
@@ -233,14 +240,19 @@ export class FriendshipService {
 
     const privacyMap = new Map(privacies.map((p) => [p.user_id, p]));
 
-    return friendships.map((f) => {
-      const friend = f.requester_id === userId ? f.addressee : f.requester;
-      return this.buildFriendProfile(
-        friend,
-        presenceMap.get(friend.id),
-        privacyMap.get(friend.id),
-      );
-    });
+    return friendships
+      .filter((f) => {
+        const friend = f.requester?.id === userId ? f.addressee : f.requester;
+        return friend !== null && friend !== undefined;
+      })
+      .map((f) => {
+        const friend = f.requester?.id === userId ? f.addressee! : f.requester!;
+        return this.buildFriendProfile(
+          friend,
+          presenceMap.get(friend.id),
+          privacyMap.get(friend.id),
+        );
+      });
   }
 
   async getFriendProfile(
@@ -266,19 +278,25 @@ export class FriendshipService {
   }
 
   async listPendingReceived(userId: string): Promise<Friendship[]> {
-    return this.friendshipRepo.find({
-      where: { addressee_id: userId, status: 'pending' },
-      relations: ['requester'],
-      order: { created_at: 'DESC' },
-    });
+    return this.friendshipRepo
+      .createQueryBuilder('f')
+      .leftJoinAndSelect('f.requester', 'requester')
+      .where('addressee.id = :uid', { uid: userId })
+      .andWhere('f.status = :status', { status: 'pending' })
+      .leftJoin('f.addressee', 'addressee')
+      .orderBy('f.created_at', 'DESC')
+      .getMany();
   }
 
   async listPendingSent(userId: string): Promise<Friendship[]> {
-    return this.friendshipRepo.find({
-      where: { requester_id: userId, status: 'pending' },
-      relations: ['addressee'],
-      order: { created_at: 'DESC' },
-    });
+    return this.friendshipRepo
+      .createQueryBuilder('f')
+      .leftJoinAndSelect('f.addressee', 'addressee')
+      .where('requester.id = :uid', { uid: userId })
+      .andWhere('f.status = :status', { status: 'pending' })
+      .leftJoin('f.requester', 'requester')
+      .orderBy('f.created_at', 'DESC')
+      .getMany();
   }
 
   private async findFriendshipBetween(
@@ -287,8 +305,10 @@ export class FriendshipService {
   ): Promise<Friendship | null> {
     return this.friendshipRepo
       .createQueryBuilder('f')
+      .leftJoin('f.requester', 'requester')
+      .leftJoin('f.addressee', 'addressee')
       .where(
-        '(f.requester_id = :a AND f.addressee_id = :b) OR (f.requester_id = :b AND f.addressee_id = :a)',
+        '(requester.id = :a AND addressee.id = :b) OR (requester.id = :b AND addressee.id = :a)',
         { a: userA, b: userB },
       )
       .getOne();

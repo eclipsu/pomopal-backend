@@ -5,7 +5,7 @@ import { UpdatePresenceDto } from './dto/update-presence.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth/jwt-auth.guard';
 
 interface AuthRequest extends Request {
-  user: { id: string };
+  user: { sub: string };
 }
 
 @Controller('presence')
@@ -19,7 +19,7 @@ export class PresenceController {
    */
   @Get('me')
   async getMyPresence(@Req() req: AuthRequest) {
-    return this.presenceService.getPresence(req.user.id);
+    return this.presenceService.getPresence(req.user.sub);
   }
 
   /**
@@ -32,6 +32,6 @@ export class PresenceController {
     @Req() req: AuthRequest,
     @Body() dto: UpdatePresenceDto,
   ) {
-    return this.presenceService.updatePresence(req.user.id, dto);
+    return this.presenceService.updatePresence(req.user.sub, dto);
   }
 }

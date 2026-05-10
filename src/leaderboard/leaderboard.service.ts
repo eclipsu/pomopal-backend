@@ -166,7 +166,9 @@ export class LeaderboardService {
       .getMany();
 
     return friendships
-      .map((f) => (f.requester_id === userId ? f.addressee_id : f.requester_id))
+      .map((f) =>
+        f.requester?.id === userId ? f.addressee?.id : f.requester?.id,
+      )
       .filter((id): id is string => id !== null);
   }
 }
