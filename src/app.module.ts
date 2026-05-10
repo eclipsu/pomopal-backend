@@ -9,6 +9,11 @@ import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { DailyStatsModule } from './daily-stats/daily-stats.module';
 import { StreaksModule } from './streaks/streaks.module';
+import { FriendsModule } from './friendship/friendship.module';
+import { PrivacyModule } from './privacy/privacy.module';
+import { MailModule } from './mail/mail.module';
+import { PresenceModule } from './presence/presence.module';
+import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import jwtConfig from './auth/config/jwt.config';
 
 @Module({
@@ -22,6 +27,11 @@ import jwtConfig from './auth/config/jwt.config';
     AuthModule,
     DailyStatsModule,
     StreaksModule,
+    FriendsModule,
+    PrivacyModule,
+    MailModule,
+    PresenceModule,
+    LeaderboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
