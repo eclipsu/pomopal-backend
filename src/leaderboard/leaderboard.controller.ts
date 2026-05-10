@@ -23,6 +23,10 @@ export class LeaderboardController {
     @Req() req: AuthRequest,
     @Query('period') period: LeaderboardPeriod = 'week',
   ) {
-    return this.leaderboardService.getFriendLeaderboard(req.user.sub, period);
+    const cleanPeriod = (period?.trim() as LeaderboardPeriod) ?? 'week';
+    return this.leaderboardService.getFriendLeaderboard(
+      req.user.sub,
+      cleanPeriod,
+    );
   }
 }

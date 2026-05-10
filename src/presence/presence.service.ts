@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Inject } from '@nestjs/common';
 import Redis from 'ioredis';
@@ -98,9 +99,15 @@ export class PresenceService {
     await this.patch(userId, { current_activity: activity });
   }
 
-  async getPresence(userId: string): Promise<PresenceData | null> {
+  async getPresence(userId: string): Promise<PresenceData> {
     const raw = await this.redis.get(keys.data(userId));
-    if (!raw) return null;
+    if (!raw)
+      return {
+        status: 'offline',
+        custom_status: null,
+        current_activity: null,
+        last_seen_at: null,
+      };
     return JSON.parse(raw) as PresenceData;
   }
 
@@ -131,14 +138,14 @@ export class PresenceService {
   ): Promise<void> {
     const current = await this.getPresence(userId);
 
-    const next: PresenceData = {
+    const defaults: PresenceData = {
       status: 'offline',
       custom_status: null,
       current_activity: null,
       last_seen_at: null,
-      ...current,
-      ...updates,
     };
+
+    const next: PresenceData = Object.assign(defaults, current ?? {}, updates);
 
     await this.redis.setex(
       keys.data(userId),
@@ -146,7 +153,6 @@ export class PresenceService {
       JSON.stringify(next),
     );
   }
-
   private async scanKeys(pattern: string): Promise<string[]> {
     const found: string[] = [];
     let cursor = '0';

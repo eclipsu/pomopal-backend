@@ -98,12 +98,12 @@ export class LeaderboardService {
 
     const stats = await this.dailyStatRepo
       .createQueryBuilder('d')
-      .select('d.user_id', 'user_id')
+      .select('d.userId', 'user_id')
       .addSelect('SUM(d.total_focus_minutes)', 'total')
-      .where('d.user_id IN (:...ids)', { ids: visibleIds })
+      .where('d.userId IN (:...ids)', { ids: visibleIds })
       .andWhere('d.date >= :start', { start: startDate })
       .andWhere('d.date <= :end', { end: endDate })
-      .groupBy('d.user_id')
+      .groupBy('d.userId')
       .getRawMany<{ user_id: string; total: string }>();
 
     const users = await this.userRepo
@@ -158,17 +158,17 @@ export class LeaderboardService {
   private async getFriendIds(userId: string): Promise<string[]> {
     const friendships = await this.friendshipRepo
       .createQueryBuilder('f')
-      .select(['f.requester_id', 'f.addressee_id'])
+      .leftJoin('f.requester', 'requester')
+      .leftJoin('f.addressee', 'addressee')
       .where('f.status = :status', { status: 'accepted' })
-      .andWhere('(f.requester_id = :uid OR f.addressee_id = :uid)', {
-        uid: userId,
-      })
-      .getMany();
+      .andWhere('(requester.id = :uid OR addressee.id = :uid)', { uid: userId })
+      .select(['f.id'])
+      .addSelect('requester.id', 'requesterId')
+      .addSelect('addressee.id', 'addresseeId')
+      .getRawMany<{ requesterId: string; addresseeId: string }>();
 
     return friendships
-      .map((f) =>
-        f.requester?.id === userId ? f.addressee?.id : f.requester?.id,
-      )
-      .filter((id): id is string => id !== null);
+      .map((f) => (f.requesterId === userId ? f.addresseeId : f.requesterId))
+      .filter((id): id is string => !!id);
   }
 }
