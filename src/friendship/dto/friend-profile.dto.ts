@@ -11,5 +11,6 @@ export class FriendProfileDto {
 
   today_focus_minutes?: number;
   streak?: number;
+  longest_streak?: number;
   total_focus_minutes?: number;
 }

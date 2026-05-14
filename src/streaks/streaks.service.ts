@@ -49,7 +49,6 @@ export class StreaksService {
     });
 
     // return streak;
-
     if (!streak || !streak.last_active_date)
       return { current_streak: 0, longest_streak: 0 };
 

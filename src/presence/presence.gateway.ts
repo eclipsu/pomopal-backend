@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -187,6 +188,12 @@ export class PresenceGateway
   // ─── Token extraction ─────────────────────────────────────────────────────────
 
   private extractToken(client: Socket): string {
+    const cookies = client.handshake.headers.cookie ?? '';
+    const match = cookies
+      .split('; ')
+      .find((r) => r.startsWith('access_token='));
+    if (match) return match.split('=')[1];
+
     const fromQuery = client.handshake.query?.token as string;
     if (fromQuery) return fromQuery;
 

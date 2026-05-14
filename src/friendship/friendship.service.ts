@@ -19,7 +19,9 @@ import { UserPrivacy } from '../entities/user-privacy.entity';
 import { SendFriendInviteDto } from './dto/send-friend-invite.dto';
 import { FriendProfileDto } from './dto/friend-profile.dto';
 import { MailService } from '../mail/mail.service';
+import { StreaksService } from 'src/streaks/streaks.service';
 import { PresenceService, PresenceData } from '../presence/presence.service';
+import { Streak } from 'src/entities/streak.entity';
 
 interface InviteTokenPayload {
   friendship_id: string;
@@ -39,9 +41,13 @@ export class FriendshipService {
     @InjectRepository(UserPrivacy)
     private readonly privacyRepo: Repository<UserPrivacy>,
 
+    @InjectRepository(Streak)
+    private readonly streakRepo: Repository<Streak>,
+
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly streakService: StreaksService,
     private readonly presenceService: PresenceService,
     private readonly dataSource: DataSource,
   ) {}
@@ -230,16 +236,21 @@ export class FriendshipService {
 
     if (!friendIds.length) return [];
 
-    const [presenceMap, privacies] = await Promise.all([
+    const [presenceMap, privacies, streakResults] = await Promise.all([
       this.presenceService.getBulkPresence(friendIds),
       this.privacyRepo
         .createQueryBuilder('p')
         .where('p.user_id IN (:...ids)', { ids: friendIds })
         .getMany(),
+      Promise.all(
+        friendIds.map((id) =>
+          this.streakService.get(id).then((s) => ({ id, ...s })),
+        ),
+      ),
     ]);
 
     const privacyMap = new Map(privacies.map((p) => [p.user_id, p]));
-
+    const streakMap = new Map(streakResults.map((s) => [s.id, s]));
     return friendships
       .filter((f) => {
         const friend = f.requester?.id === userId ? f.addressee : f.requester;
@@ -251,6 +262,7 @@ export class FriendshipService {
           friend,
           presenceMap.get(friend.id),
           privacyMap.get(friend.id),
+          streakMap.get(friend.id),
         );
       });
   }
@@ -318,11 +330,14 @@ export class FriendshipService {
     friend: User,
     presence?: PresenceData,
     privacy?: UserPrivacy,
+    streak?: { current_streak: number; longest_streak: number },
   ): FriendProfileDto {
     const profile: FriendProfileDto = {
       id: friend.id,
       name: friend.name,
       avatar_url: friend.avatar_url ?? null,
+      streak: streak?.current_streak,
+      longest_streak: streak?.longest_streak,
     };
 
     const canShowStatus = privacy?.show_online_status ?? true;
