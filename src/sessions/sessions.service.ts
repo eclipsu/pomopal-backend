@@ -21,11 +21,11 @@ export class SessionsService {
     private readonly dailyStatsService: DailyStatsService,
     private readonly streakService: StreaksService,
   ) {}
+
   findAll() {
     return 'This action returns all sessions';
   }
 
-  // this is to start a session
   async start(userId: string, dto: CreateSessionDto) {
     const session = this.sessionRepo.create({
       user: { id: userId },
@@ -40,7 +40,6 @@ export class SessionsService {
     return await this.sessionRepo.save(session);
   }
 
-  // mark a session complete
   async complete(userId, sessionId: string) {
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
@@ -82,10 +81,9 @@ export class SessionsService {
       skip: offset,
     });
   }
+
   async findOne(id: string) {
-    return await this.sessionRepo.findOne({
-      where: { id },
-    });
+    return await this.sessionRepo.findOne({ where: { id } });
   }
 
   async create(dto: CreateSessionDto, userId: string) {
@@ -97,8 +95,43 @@ export class SessionsService {
       started_at: new Date(),
       completed: false,
     });
-
     return await this.sessionRepo.save(session);
+  }
+
+  async apply(userId: string, sessionId: string, elapsedSeconds?: number) {
+    const session = await this.sessionRepo.findOne({
+      where: { id: sessionId },
+      relations: ['user'],
+    });
+
+    if (!session || session.user.id !== userId) {
+      throw new NotFoundException();
+    }
+
+    if (session.completed) {
+      throw new BadRequestException('Session already completed');
+    }
+
+    const now = new Date();
+
+    const elapsedMinutes =
+      elapsedSeconds != null
+        ? elapsedSeconds / 60
+        : (now.getTime() - session.started_at.getTime()) / 60000;
+
+    session.actual_duration_minutes = Math.floor(elapsedMinutes);
+    session.ended_at = now;
+
+    const saved = await this.sessionRepo.save(session);
+
+    if (session.type === SessionType.POMODORO) {
+      await this.dailyStatsService.applySession(
+        session,
+        session.user.time_zone,
+      );
+    }
+
+    return saved;
   }
 
   private toResponse(session: Session): SessionResponseDto {

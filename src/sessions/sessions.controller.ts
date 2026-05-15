@@ -8,11 +8,11 @@ import {
   Patch,
   Req,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { CreateSessionDto } from './dto/createSessions.dto';
 import { SessionsService } from './sessions.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth/jwt-auth.guard';
-import { Query } from '@nestjs/common';
 
 @UseGuards(JwtAuthGuard)
 @Controller('sessions')
@@ -34,6 +34,15 @@ export class SessionsController {
       limit: limit ? parseInt(limit) : undefined,
       offset: offset ? parseInt(offset) : undefined,
     });
+  }
+
+  @Patch(':id/heartbeat')
+  apply(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body('elapsed_seconds') elapsedSeconds?: number,
+  ) {
+    return this.sessionsService.apply(req.user.sub, id, elapsedSeconds);
   }
 
   @Patch(':id/complete')
