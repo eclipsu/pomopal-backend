@@ -40,7 +40,7 @@ export class SessionsService {
     return await this.sessionRepo.save(session);
   }
 
-  async complete(userId, sessionId: string) {
+  async complete(userId: string, sessionId: string) {
     const session = await this.sessionRepo.findOne({
       where: { id: sessionId },
       relations: ['user'],
@@ -50,25 +50,35 @@ export class SessionsService {
       throw new NotFoundException();
     }
 
-    if (session.completed)
+    if (session.completed) {
       throw new BadRequestException('Session already completed');
+    }
 
     const elapsedMinutes = (Date.now() - session.started_at.getTime()) / 60000;
     if (elapsedMinutes < session.planned_duration_minutes) {
       throw new BadRequestException('Session not finished yet');
     }
 
-    session.completed = true;
-    session.actual_duration_minutes = session.planned_duration_minutes;
-    session.ended_at = new Date();
+    const previouslyAccredited = session.actual_duration_minutes ?? 0;
+    const finalMinutes = session.planned_duration_minutes;
+    const delta = finalMinutes - previouslyAccredited;
 
-    if (session.type === SessionType.POMODORO) {
-      await this.dailyStatsService.applySession(
-        session,
+    session.completed = true;
+    session.ended_at = new Date();
+    session.actual_duration_minutes = finalMinutes;
+
+    const saved = await this.sessionRepo.save(session);
+
+    if (session.type === SessionType.POMODORO && delta > 0) {
+      await this.dailyStatsService.applyMinutes(
+        session.user.id,
+        session.started_at,
         session.user.time_zone,
+        delta,
       );
     }
-    return this.toResponse(await this.sessionRepo.save(session));
+
+    return this.toResponse(saved);
   }
 
   async list(userId: string, options?: { limit?: number; offset?: number }) {
@@ -113,25 +123,29 @@ export class SessionsService {
     }
 
     const now = new Date();
-
-    const elapsedMinutes =
+    const newElapsedMinutes = Math.floor(
       elapsedSeconds != null
         ? elapsedSeconds / 60
-        : (now.getTime() - session.started_at.getTime()) / 60000;
+        : (now.getTime() - session.started_at.getTime()) / 60000,
+    );
 
-    session.actual_duration_minutes = Math.floor(elapsedMinutes);
+    const previousMinutes = session.actual_duration_minutes ?? 0;
+    const delta = newElapsedMinutes - previousMinutes;
+
+    session.actual_duration_minutes = newElapsedMinutes;
     session.ended_at = now;
+    await this.sessionRepo.save(session);
 
-    const saved = await this.sessionRepo.save(session);
-
-    if (session.type === SessionType.POMODORO) {
-      await this.dailyStatsService.applySession(
-        session,
+    if (session.type === SessionType.POMODORO && delta > 0) {
+      await this.dailyStatsService.applyMinutes(
+        session.user.id,
+        session.started_at,
         session.user.time_zone,
+        delta,
       );
     }
 
-    return saved;
+    return session;
   }
 
   private toResponse(session: Session): SessionResponseDto {
