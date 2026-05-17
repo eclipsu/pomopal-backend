@@ -10,6 +10,7 @@ COPY . .
 
 RUN npm run build
 
-EXPOSE 8001
+EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+# Start app
+CMD ["node", "dist/main"]

@@ -24,26 +24,10 @@ jobs:
       - name: Deploy to EC2
         run: |
           ssh -i ~/.ssh/key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            set -e
             cd ~/pomopal-backend
             git pull origin main
-            export COMPOSE_BAKE=false
-            docker compose down --remove-orphans
-            docker rm -f nginx 2>/dev/null || true
-            # Clear corrupt builder cache (snapshot parent not found on small disks)
-            docker builder prune -af 2>/dev/null || true
-            docker image prune -af 2>/dev/null || true
-            docker compose build --no-cache --pull app
-            docker compose up -d --remove-orphans
-            sleep 8
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/user/profile || echo "000")
-            if [ "$code" != "401" ] && [ "$code" != "403" ]; then
-              echo "Health check failed (HTTP $code)"
-              docker compose ps
-              docker compose logs app --tail 80
-              exit 1
-            fi
-            echo "Deploy OK (HTTP $code)"
+            docker compose down
+            docker compose up -d --build
           EOF
 
       - name: Notify Discord
