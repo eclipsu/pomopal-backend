@@ -27,7 +27,7 @@ services:
     restart: always
     command: node dist/main.js
     environment:
-      PORT: 8000
+      PORT: 8001
       NODE_ENV: production
       DB_HOST: db
       DB_PORT: 5432
