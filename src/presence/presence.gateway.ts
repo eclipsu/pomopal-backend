@@ -10,8 +10,11 @@ import {
   WsException,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { Friendship } from '../entities/friendship.entity';
 import { PresenceService } from './presence.service';
 import { UpdatePresenceDto } from './dto/update-presence.dto';
 import { PresenceStatus } from './dto/update-presence.dto';
@@ -29,7 +32,15 @@ interface PresenceBroadcast {
 
 @WebSocketGateway({
   namespace: '/presence',
-  cors: { origin: process.env.APP_URL, credentials: true },
+  cors: {
+    origin: [
+      process.env.APP_URL,
+      'https://pomopal.lol',
+      'https://www.pomopal.lol',
+      'http://localhost:3000',
+    ].filter(Boolean),
+    credentials: true,
+  },
 })
 export class PresenceGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -45,6 +56,8 @@ export class PresenceGateway
   constructor(
     private readonly presenceService: PresenceService,
     private readonly jwtService: JwtService,
+    @InjectRepository(Friendship)
+    private readonly friendshipRepo: Repository<Friendship>,
   ) {}
 
   // ─── Connection lifecycle ────────────────────────────────────────────────────
@@ -126,6 +139,11 @@ export class PresenceGateway
     @ConnectedSocket() client: AuthSocket,
     @MessageBody() data: { friendId: string },
   ): Promise<void> {
+    const allowed = await this.canViewPresence(client.userId, data.friendId);
+    if (!allowed) {
+      throw new WsException('Not allowed to view this user’s presence.');
+    }
+
     await client.join(`user:${data.friendId}`);
 
     // Send current presence snapshot for this friend immediately
@@ -186,6 +204,26 @@ export class PresenceGateway
   }
 
   // ─── Token extraction ─────────────────────────────────────────────────────────
+
+  private async canViewPresence(
+    viewerId: string,
+    targetId: string,
+  ): Promise<boolean> {
+    if (viewerId === targetId) return true;
+
+    const friendship = await this.friendshipRepo
+      .createQueryBuilder('f')
+      .leftJoin('f.requester', 'requester')
+      .leftJoin('f.addressee', 'addressee')
+      .where('f.status = :status', { status: 'accepted' })
+      .andWhere(
+        '(requester.id = :viewer AND addressee.id = :target) OR (requester.id = :target AND addressee.id = :viewer)',
+        { viewer: viewerId, target: targetId },
+      )
+      .getOne();
+
+    return !!friendship;
+  }
 
   private extractToken(client: Socket): string {
     const cookies = client.handshake.headers.cookie ?? '';

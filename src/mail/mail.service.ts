@@ -32,8 +32,11 @@ export class MailService {
       day: 'numeric',
     });
 
+    const fromAddress = this.config.get<string>('SMTP_FROM');
+    const fromName = this.config.get<string>('SMTP_FROM_NAME', 'Pomopal');
+
     await this.transporter.sendMail({
-      from: `"Pomodoro App" <${this.config.get('SMTP_FROM')}>`,
+      from: `"${fromName}" <${fromAddress}>`,
       to: opts.to,
       subject: `${opts.requesterName} wants to be your friend 🍅`,
       html: this.inviteTemplate(
@@ -88,7 +91,7 @@ export class MailService {
 
   private inviteText(name: string, link: string, expiry: string): string {
     return [
-      `${name} wants to be your friend on Pomodoro App.`,
+      `${name} wants to be your friend on Pomopal.`,
       '',
       `Accept the request here: ${link}`,
       '',

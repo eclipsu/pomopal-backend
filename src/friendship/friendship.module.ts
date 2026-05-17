@@ -15,6 +15,8 @@ import { PrivacyModule } from 'src/privacy/privacy.module';
 import { MailModule } from 'src/mail/mail.module';
 import { StreaksModule } from 'src/streaks/streaks.module';
 import { Streak } from 'src/entities/streak.entity';
+import { DailyStatsModule } from 'src/daily-stats/daily-stats.module';
+import { LeaderboardModule } from 'src/leaderboard/leaderboard.module';
 
 @Module({
   imports: [
@@ -32,6 +34,8 @@ import { Streak } from 'src/entities/streak.entity';
     PrivacyModule,
     MailModule,
     StreaksModule,
+    DailyStatsModule,
+    LeaderboardModule,
   ],
   providers: [FriendshipService],
   controllers: [FriendshipController],

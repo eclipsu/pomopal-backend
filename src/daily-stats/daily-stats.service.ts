@@ -84,6 +84,16 @@ export class DailyStatsService {
     return results;
   }
 
+  async getTotalFocusMinutes(userId: string): Promise<number> {
+    const row = await this.dailyStatRepo
+      .createQueryBuilder('d')
+      .select('COALESCE(SUM(d.total_focus_minutes), 0)', 'total')
+      .where('d.userId = :uid', { uid: userId })
+      .getRawOne<{ total: string }>();
+
+    return parseInt(row?.total ?? '0', 10);
+  }
+
   async applySession(session: Session, userTimeZone: string) {
     const date: string = toUserDate(session.started_at, userTimeZone);
 

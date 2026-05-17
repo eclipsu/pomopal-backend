@@ -71,6 +71,34 @@ export class FriendshipController {
   }
 
   /**
+   * POST /friends/requests/:id/accept
+   * Accept a pending request (addressee must be logged in)
+   */
+  @Post('requests/:id/accept')
+  async acceptPending(
+    @Req() req: AuthRequest,
+    @Param('id', ParseUUIDPipe) friendshipId: string,
+  ) {
+    return this.friendshipService.acceptPendingRequest(
+      req.user.sub,
+      friendshipId,
+    );
+  }
+
+  /**
+   * DELETE /friends/requests/:id
+   * Cancel or decline a pending request
+   */
+  @Delete('requests/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async cancelPending(
+    @Req() req: AuthRequest,
+    @Param('id', ParseUUIDPipe) friendshipId: string,
+  ): Promise<void> {
+    await this.friendshipService.cancelPending(req.user.sub, friendshipId);
+  }
+
+  /**
    * GET /friends/:id
    * View a specific friend's profile
    */

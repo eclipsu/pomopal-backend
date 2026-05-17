@@ -18,10 +18,14 @@ import { User } from '../entities/user.entity';
 import { UserPrivacy } from '../entities/user-privacy.entity';
 import { SendFriendInviteDto } from './dto/send-friend-invite.dto';
 import { FriendProfileDto } from './dto/friend-profile.dto';
+import { PendingFriendRequestDto } from './dto/pending-friend-request.dto';
 import { MailService } from '../mail/mail.service';
 import { StreaksService } from 'src/streaks/streaks.service';
+import { DailyStatsService } from 'src/daily-stats/daily-stats.service';
+import { LeaderboardService } from 'src/leaderboard/leaderboard.service';
 import { PresenceService, PresenceData } from '../presence/presence.service';
 import { Streak } from 'src/entities/streak.entity';
+import { FriendProfileVisibilityDto } from './dto/friend-profile-visibility.dto';
 
 interface InviteTokenPayload {
   friendship_id: string;
@@ -48,6 +52,8 @@ export class FriendshipService {
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
     private readonly streakService: StreaksService,
+    private readonly dailyStatsService: DailyStatsService,
+    private readonly leaderboardService: LeaderboardService,
     private readonly presenceService: PresenceService,
     private readonly dataSource: DataSource,
   ) {}
@@ -56,8 +62,6 @@ export class FriendshipService {
     requesterId: string,
     dto: SendFriendInviteDto,
   ): Promise<void> {
-    console.log('sendInvite called', requesterId, dto);
-
     const requester = await this.userRepo.findOneByOrFail({ id: requesterId });
 
     if (requester.email === dto.email) {
@@ -258,11 +262,19 @@ export class FriendshipService {
       })
       .map((f) => {
         const friend = f.requester?.id === userId ? f.addressee! : f.requester!;
+        const streak = streakMap.get(friend.id);
         return this.buildFriendProfile(
           friend,
           presenceMap.get(friend.id),
           privacyMap.get(friend.id),
-          streakMap.get(friend.id),
+          streak
+            ? {
+                streak: {
+                  current_streak: streak.current_streak,
+                  longest_streak: streak.longest_streak,
+                },
+              }
+            : undefined,
         );
       });
   }
@@ -276,39 +288,101 @@ export class FriendshipService {
       throw new NotFoundException('Friend not found.');
     }
 
-    const [friend, presence, privacy] = await Promise.all([
-      this.userRepo.findOneByOrFail({ id: friendId }),
-      this.presenceService.getPresence(friendId),
-      this.privacyRepo.findOneBy({ user_id: friendId }),
-    ]);
+    const [friend, presence, privacy, streak, todayStat, totalMinutes, leaderboard] =
+      await Promise.all([
+        this.userRepo.findOneByOrFail({ id: friendId }),
+        this.presenceService.getPresence(friendId),
+        this.privacyRepo.findOneBy({ user_id: friendId }),
+        this.streakService.get(friendId),
+        this.dailyStatsService.getDailyStat(friendId),
+        this.dailyStatsService.getTotalFocusMinutes(friendId),
+        this.leaderboardService.getFriendLeaderboard(userId, 'week'),
+      ]);
 
-    return this.buildFriendProfile(
-      friend,
-      presence ?? undefined,
-      privacy ?? undefined,
-    );
+    const leaderboardEntry = leaderboard.find((e) => e.user_id === friendId);
+
+    return this.buildFriendProfile(friend, presence ?? undefined, privacy ?? undefined, {
+      streak,
+      todayFocusMinutes: todayStat.total_focus_minutes,
+      totalFocusMinutes: totalMinutes,
+      leaderboardRank: leaderboardEntry?.rank,
+    });
   }
 
-  async listPendingReceived(userId: string): Promise<Friendship[]> {
-    return this.friendshipRepo
+  async listPendingReceived(userId: string): Promise<PendingFriendRequestDto[]> {
+    const rows = await this.friendshipRepo
       .createQueryBuilder('f')
       .leftJoinAndSelect('f.requester', 'requester')
+      .leftJoin('f.addressee', 'addressee')
       .where('addressee.id = :uid', { uid: userId })
       .andWhere('f.status = :status', { status: 'pending' })
-      .leftJoin('f.addressee', 'addressee')
       .orderBy('f.created_at', 'DESC')
       .getMany();
+
+    return rows.map((f) => this.toPendingRequestDto(f));
   }
 
-  async listPendingSent(userId: string): Promise<Friendship[]> {
-    return this.friendshipRepo
+  async listPendingSent(userId: string): Promise<PendingFriendRequestDto[]> {
+    const rows = await this.friendshipRepo
       .createQueryBuilder('f')
       .leftJoinAndSelect('f.addressee', 'addressee')
+      .leftJoin('f.requester', 'requester')
       .where('requester.id = :uid', { uid: userId })
       .andWhere('f.status = :status', { status: 'pending' })
-      .leftJoin('f.requester', 'requester')
       .orderBy('f.created_at', 'DESC')
       .getMany();
+
+    return rows.map((f) => this.toPendingRequestDto(f));
+  }
+
+  async acceptPendingRequest(
+    userId: string,
+    friendshipId: string,
+  ): Promise<Friendship> {
+    const friendship = await this.friendshipRepo.findOne({
+      where: { id: friendshipId, status: 'pending' },
+      relations: ['requester', 'addressee'],
+    });
+
+    if (!friendship || friendship.addressee?.id !== userId) {
+      throw new NotFoundException('Friend request not found.');
+    }
+
+    return this.dataSource.transaction(async (em) => {
+      await em.update(Friendship, friendship.id, {
+        status: 'accepted',
+        invite_token: null,
+        invite_token_expires_at: null,
+        accepted_at: new Date(),
+      });
+
+      await this.ensurePrivacy(em, friendship.requester.id);
+      await this.ensurePrivacy(em, userId);
+
+      return em.findOneOrFail(Friendship, {
+        where: { id: friendship.id },
+        relations: ['requester', 'addressee'],
+      });
+    });
+  }
+
+  async cancelPending(userId: string, friendshipId: string): Promise<void> {
+    const friendship = await this.friendshipRepo.findOne({
+      where: { id: friendshipId, status: 'pending' },
+      relations: ['requester', 'addressee'],
+    });
+
+    if (!friendship) {
+      throw new NotFoundException('Friend request not found.');
+    }
+
+    const isRequester = friendship.requester?.id === userId;
+    const isAddressee = friendship.addressee?.id === userId;
+    if (!isRequester && !isAddressee) {
+      throw new NotFoundException('Friend request not found.');
+    }
+
+    await this.friendshipRepo.remove(friendship);
   }
 
   private async findFriendshipBetween(
@@ -326,33 +400,91 @@ export class FriendshipService {
       .getOne();
   }
 
+  private getVisibility(privacy?: UserPrivacy): FriendProfileVisibilityDto {
+    return {
+      show_online_status: privacy?.show_online_status ?? true,
+      show_current_activity: privacy?.show_current_activity ?? true,
+      show_daily_stats: privacy?.show_daily_stats ?? true,
+      show_streak: privacy?.show_streak ?? true,
+      show_total_focus_time: privacy?.show_total_focus_time ?? true,
+      show_on_leaderboard: privacy?.show_on_leaderboard ?? true,
+    };
+  }
+
   private buildFriendProfile(
     friend: User,
     presence?: PresenceData,
     privacy?: UserPrivacy,
-    streak?: { current_streak: number; longest_streak: number },
+    extras?: {
+      streak?: { current_streak: number; longest_streak: number };
+      todayFocusMinutes?: number;
+      totalFocusMinutes?: number;
+      leaderboardRank?: number;
+    },
   ): FriendProfileDto {
+    const visibility = this.getVisibility(privacy);
+
     const profile: FriendProfileDto = {
       id: friend.id,
       name: friend.name,
       avatar_url: friend.avatar_url ?? null,
-      streak: streak?.current_streak,
-      longest_streak: streak?.longest_streak,
+      visibility,
     };
 
-    const canShowStatus = privacy?.show_online_status ?? true;
-    const canShowActivity = privacy?.show_current_activity ?? true;
-
-    if (presence && canShowStatus) {
-      profile.status = presence.status;
-      profile.custom_status = presence.custom_status;
+    if (visibility.show_streak && extras?.streak) {
+      profile.streak = extras.streak.current_streak;
+      profile.longest_streak = extras.streak.longest_streak;
     }
 
-    if (presence && canShowActivity) {
+    if (visibility.show_daily_stats && extras?.todayFocusMinutes !== undefined) {
+      profile.today_focus_minutes = extras.todayFocusMinutes;
+    }
+
+    if (visibility.show_total_focus_time && extras?.totalFocusMinutes !== undefined) {
+      profile.total_focus_minutes = extras.totalFocusMinutes;
+    }
+
+    if (visibility.show_on_leaderboard && extras?.leaderboardRank !== undefined) {
+      profile.leaderboard_rank = extras.leaderboardRank;
+    }
+
+    if (presence && visibility.show_online_status) {
+      profile.status = presence.status;
+      profile.custom_status = presence.custom_status;
+      if (presence.last_seen_at) {
+        profile.last_seen_at = presence.last_seen_at;
+      }
+    }
+
+    if (presence && visibility.show_current_activity) {
       profile.current_activity = presence.current_activity;
     }
 
     return profile;
+  }
+
+  private toPendingRequestDto(f: Friendship): PendingFriendRequestDto {
+    return {
+      id: f.id,
+      status: f.status,
+      created_at: f.created_at,
+      requester: f.requester
+        ? {
+            id: f.requester.id,
+            name: f.requester.name,
+            email: f.requester.email,
+            avatar_url: f.requester.avatar_url ?? null,
+          }
+        : undefined,
+      addressee: f.addressee
+        ? {
+            id: f.addressee.id,
+            name: f.addressee.name,
+            email: f.addressee.email,
+            avatar_url: f.addressee.avatar_url ?? null,
+          }
+        : undefined,
+    };
   }
 
   private async ensurePrivacy(em: any, userId: string): Promise<void> {

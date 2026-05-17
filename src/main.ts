@@ -13,7 +13,12 @@ async function bootstrap() {
   (app.getHttpAdapter().getInstance() as any).set('trust proxy', 1);
 
   app.enableCors({
-    origin: ['https://pomopal.vercel.app', 'http://localhost:3000'],
+    origin: [
+      'https://pomopal.lol',
+      'https://www.pomopal.lol',
+      'https://pomopal.vercel.app',
+      'http://localhost:3000',
+    ],
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
     credentials: true,
   });

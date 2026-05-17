@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { Friendship } from '../entities/friendship.entity';
 import { PresenceService } from './presence.service';
 import { PresenceController } from './presence.controller';
 import { PresenceGateway } from './presence.gateway';
@@ -10,6 +12,7 @@ import { RedisProvider } from './redis.provider';
 
 @Module({
   imports: [
+    TypeOrmModule.forFeature([Friendship]),
     ConfigModule,
     ScheduleModule.forRoot(),
     JwtModule.registerAsync({

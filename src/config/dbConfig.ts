@@ -10,7 +10,7 @@ export default (): PostgresConnectionOptions => ({
   database: process.env.DB_NAME,
   synchronize: true,
   migrationsRun: true,
-  // ssl: isDevelopment ? false : { rejectUnauthorized: false },
+  ssl: isDevelopment ? false : { rejectUnauthorized: false },
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
 });
