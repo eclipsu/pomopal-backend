@@ -6,6 +6,7 @@ import { User } from 'src/entities/user.entity';
 import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { TimezoneDto } from './dto/update-timezone.dto';
 import { UpdateUserSettingsDto } from './dto/update-settings.dto';
 
@@ -13,11 +14,13 @@ import { UpdateUserSettingsDto } from './dto/update-settings.dto';
 export class UserService {
   constructor(@InjectRepository(User) private userRepo: Repository<User>) {}
   async create(createUserDto: CreateUserDto) {
-    const { password, ...rest } = createUserDto;
-    const hashed_password = await bcrypt.hash(password, 12);
+    const { password, timezone, ...rest } = createUserDto;
+    const secret = password?.trim() || randomBytes(32).toString('hex');
+    const password_hash = await bcrypt.hash(secret, 12);
     const user = this.userRepo.create({
       ...rest,
-      password_hash: hashed_password,
+      time_zone: timezone?.trim() || 'UTC',
+      password_hash,
     });
 
     return await this.userRepo.save(user);

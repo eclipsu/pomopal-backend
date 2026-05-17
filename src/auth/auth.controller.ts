@@ -12,8 +12,10 @@ import {
   Req,
   Res,
   Get,
+  Query,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request as ExpressRequest, Response } from 'express';
+import * as passport from 'passport';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import { RefreshAuthGuard } from './guards/refresh-auth/refresh-auth.guard';
@@ -80,15 +82,30 @@ export class AuthController {
     return { id };
   }
 
-  @UseGuards(GoogleAuthGuard)
   @Get('google/login')
-  googleLogin() {}
+  googleLogin(
+    @Req() req: ExpressRequest,
+    @Res() res: Response,
+    @Query('timezone') timezone?: string,
+  ) {
+    if (timezone?.trim()) {
+      res.cookie('oauth_timezone', timezone.trim(), {
+        httpOnly: true,
+        maxAge: 10 * 60 * 1000,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+      });
+    }
+    passport.authenticate('google', { session: false })(req, res);
+  }
 
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
   async googleCallback(@Req() req, @Res() res: Response) {
     const { token, refreshToken } = await this.authService.login(req.user.id);
     this.setTokenCookies(res, token, refreshToken);
+    res.clearCookie('oauth_timezone', { path: '/' });
     const redirectTo =
       this.configService.get<string>('FRONTEND_URL') ||
       'http://localhost:3000/success';

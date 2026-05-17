@@ -21,21 +21,27 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientSecret: googleConfiguration.clientSecret!,
       callbackURL: googleConfiguration.redirectUri!,
       scope: ['email', 'profile'],
+      passReqToCallback: true,
     });
   }
   async validate(
+    req: { cookies?: { oauth_timezone?: string }; query?: { timezone?: string } },
     accessToken: string,
     refreshToken: string,
     profile: any,
     done: VerifyCallback,
   ) {
-    // console.log(profile);
+    const timezone =
+      req.cookies?.oauth_timezone?.trim() ||
+      (typeof req.query?.timezone === 'string' ? req.query.timezone.trim() : '') ||
+      'UTC';
+
     const user = await this.authService.validateGoogleUser({
       email: profile.emails[0].value,
       name: profile.displayName,
       avatar_url: profile.photos[0].value,
       password: '',
-      timezone: '',
+      timezone,
       pomodoro_minutes: 25,
       short_break_minutes: 5,
       long_break_minutes: 15,
