@@ -6,7 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DailyStat } from 'src/entities/daily-stat.entity';
 import { Session } from 'src/entities/sessions.entity';
 import { Between, Repository } from 'typeorm';
-import { toUserDate } from '../common/time';
+import { normalizeTimezone, toUserDate } from '../common/time';
 import { StreaksService } from 'src/streaks/streaks.service';
 import { User } from 'src/entities/user.entity';
 import { DailyStatDto } from './dto/daily-stat.dto.ts';
@@ -27,7 +27,7 @@ export class DailyStatsService {
         where: { id: userId },
         select: ['time_zone'],
       });
-      const tz = user?.time_zone ?? 'UTC';
+      const tz = normalizeTimezone(user?.time_zone);
       queryDate = toUserDate(new Date(), tz);
     }
 
@@ -109,7 +109,7 @@ export class DailyStatsService {
     minutes: number,
     sessionCount = 0,
   ) {
-    const date = toUserDate(sessionDate, userTimeZone);
+    const date = toUserDate(sessionDate, normalizeTimezone(userTimeZone));
 
     let stat = await this.dailyStatRepo.findOne({
       where: { user: { id: userId }, date },

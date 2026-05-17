@@ -11,7 +11,7 @@ import { SessionResponseDto } from './dto/response-dto';
 import { DailyStatsService } from 'src/daily-stats/daily-stats.service';
 import { StreaksService } from 'src/streaks/streaks.service';
 import { User } from 'src/entities/user.entity';
-import { toUserDate } from '../common/time';
+import { normalizeTimezone, toUserDate } from '../common/time';
 
 @Injectable()
 export class SessionsService {
@@ -35,7 +35,10 @@ export class SessionsService {
       completed: false,
     });
 
-    const date: string = toUserDate(session.started_at, session.user.time_zone);
+    const date: string = toUserDate(
+      session.started_at,
+      normalizeTimezone(session.user.time_zone),
+    );
     await this.streakService.update(session.user, date);
     return await this.sessionRepo.save(session);
   }
@@ -73,7 +76,7 @@ export class SessionsService {
       await this.dailyStatsService.applyMinutes(
         session.user.id,
         session.started_at,
-        session.user.time_zone,
+        normalizeTimezone(session.user.time_zone),
         delta,
       );
     }
@@ -140,7 +143,7 @@ export class SessionsService {
       await this.dailyStatsService.applyMinutes(
         session.user.id,
         session.started_at,
-        session.user.time_zone,
+        normalizeTimezone(session.user.time_zone),
         delta,
       );
     }

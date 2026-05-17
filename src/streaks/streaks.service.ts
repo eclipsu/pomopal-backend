@@ -3,7 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Streak } from 'src/entities/streak.entity';
 import { User } from 'src/entities/user.entity';
-import { todayInTz, yesterdayInTz, toUserDate } from 'src/common/time';
+import {
+  todayInTz,
+  yesterdayInTz,
+  normalizeTimezone,
+  streakDateToYmd,
+} from 'src/common/time';
 
 @Injectable()
 export class StreaksService {
@@ -52,13 +57,14 @@ export class StreaksService {
     if (!streak || !streak.last_active_date)
       return { current_streak: 0, longest_streak: 0 };
 
-    const today = todayInTz(streak.user.time_zone);
-    const yesterday = yesterdayInTz(streak.user.time_zone);
+    const tz = normalizeTimezone(streak.user?.time_zone);
+    const today = todayInTz(tz);
+    const yesterday = yesterdayInTz(tz);
 
-    const lastActiveDate = toUserDate(
-      new Date(streak.last_active_date),
-      streak.user.time_zone,
-    );
+    const lastActiveDate = streakDateToYmd(streak.last_active_date, tz);
+    if (!lastActiveDate) {
+      return { current_streak: 0, longest_streak: streak.longest_streak };
+    }
 
     if (lastActiveDate === today || lastActiveDate === yesterday)
       return {
