@@ -27,19 +27,25 @@ export class SessionsService {
   }
 
   async start(userId: string, dto: CreateSessionDto) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException();
+    }
+
     const session = this.sessionRepo.create({
       user: { id: userId },
       type: dto.type,
       planned_duration_minutes: dto.planned_minutes,
+      actual_duration_minutes: 0,
       started_at: new Date(),
       completed: false,
     });
 
-    const date: string = toUserDate(
+    const date = toUserDate(
       session.started_at,
-      normalizeTimezone(session.user.time_zone),
+      normalizeTimezone(user.time_zone),
     );
-    await this.streakService.update(session.user, date);
+    await this.streakService.update(user, date);
     return await this.sessionRepo.save(session);
   }
 
@@ -57,12 +63,17 @@ export class SessionsService {
       throw new BadRequestException('Session already completed');
     }
 
-    const elapsedMinutes = (Date.now() - session.started_at.getTime()) / 60000;
-    if (elapsedMinutes < session.planned_duration_minutes) {
+    const wallMinutes =
+      (Date.now() - session.started_at.getTime()) / 60000;
+    const credited = session.actual_duration_minutes ?? 0;
+    const planned = session.planned_duration_minutes;
+    const finished =
+      wallMinutes >= planned - 0.5 || credited >= planned - 0.5;
+    if (!finished) {
       throw new BadRequestException('Session not finished yet');
     }
 
-    const previouslyAccredited = session.actual_duration_minutes ?? 0;
+    const previouslyAccredited = credited;
     const finalMinutes = session.planned_duration_minutes;
     const delta = finalMinutes - previouslyAccredited;
 
@@ -126,11 +137,11 @@ export class SessionsService {
     }
 
     const now = new Date();
-    const newElapsedMinutes = Math.floor(
+    const elapsedMs =
       elapsedSeconds != null
-        ? elapsedSeconds / 60
-        : (now.getTime() - session.started_at.getTime()) / 60000,
-    );
+        ? elapsedSeconds * 1000
+        : now.getTime() - session.started_at.getTime();
+    const newElapsedMinutes = Math.max(0, Math.ceil(elapsedMs / 60000));
 
     const previousMinutes = session.actual_duration_minutes ?? 0;
     const delta = newElapsedMinutes - previousMinutes;

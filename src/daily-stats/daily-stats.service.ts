@@ -5,11 +5,38 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DailyStat } from 'src/entities/daily-stat.entity';
 import { Session } from 'src/entities/sessions.entity';
-import { Between, Repository } from 'typeorm';
+import { Between, QueryFailedError, Repository } from 'typeorm';
 import { normalizeTimezone, toUserDate } from '../common/time';
 import { StreaksService } from 'src/streaks/streaks.service';
 import { User } from 'src/entities/user.entity';
 import { DailyStatDto } from './dto/daily-stat.dto.ts';
+
+function addDaysYmd(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  return dt.toLocaleDateString('en-CA');
+}
+
+function statDateKey(date: string | Date): string {
+  if (typeof date === 'string') {
+    return date.slice(0, 10);
+  }
+  if (date instanceof Date) {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return String(date).slice(0, 10);
+}
+
+function isDuplicateDailyStatError(err: unknown): boolean {
+  return (
+    err instanceof QueryFailedError &&
+    (err as QueryFailedError & { driverError?: { code?: string } }).driverError
+      ?.code === '23505'
+  );
+}
 
 @Injectable()
 export class DailyStatsService {
@@ -50,15 +77,12 @@ export class DailyStatsService {
       order: { date: 'ASC' },
     });
 
-    const statsMap = new Map(existingStats.map((s) => [s.date, s]));
+    const statsMap = new Map(
+      existingStats.map((s) => [statDateKey(s.date), s]),
+    );
     const results: DailyStat[] = [];
 
-    for (
-      let d = new Date(from);
-      d <= new Date(to);
-      d.setDate(d.getDate() + 1)
-    ) {
-      const dateStr = d.toISOString().split('T')[0];
+    for (let dateStr = from; dateStr <= to; dateStr = addDaysYmd(dateStr, 1)) {
       results.push(
         statsMap.get(dateStr) ??
           ({
@@ -69,7 +93,11 @@ export class DailyStatsService {
       );
     }
 
-    return results;
+    return results.map((r) => ({
+      date: statDateKey(r.date),
+      total_focus_minutes: r.total_focus_minutes ?? 0,
+      session_count: r.session_count ?? 0,
+    }));
   }
 
   async getTotalHours(
@@ -92,7 +120,7 @@ export class DailyStatsService {
     };
   }
 
-  async getTotalFocusMinutes(userId: string): Promise<number> {
+  private async sumDailyFocusMinutes(userId: string): Promise<number> {
     const row = await this.dailyStatRepo
       .createQueryBuilder('d')
       .select('COALESCE(SUM(d.total_focus_minutes), 0)', 'total')
@@ -102,6 +130,50 @@ export class DailyStatsService {
     return parseInt(row?.total ?? '0', 10);
   }
 
+  /** Read cached all-time total; backfill from daily_stats when the column is null. */
+  async getAllTimeFocusMinutes(userId: string): Promise<number> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'all_time_focus_minutes'],
+    });
+    if (!user) return 0;
+
+    if (user.all_time_focus_minutes != null) {
+      return user.all_time_focus_minutes;
+    }
+
+    const total = await this.sumDailyFocusMinutes(userId);
+    await this.userRepo.update(userId, { all_time_focus_minutes: total });
+    return total;
+  }
+
+  async getTotalFocusMinutes(userId: string): Promise<number> {
+    return this.getAllTimeFocusMinutes(userId);
+  }
+
+  private async bumpAllTimeFocusMinutes(
+    userId: string,
+    minutes: number,
+  ): Promise<void> {
+    if (minutes <= 0) return;
+
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'all_time_focus_minutes'],
+    });
+    if (!user) return;
+
+    if (user.all_time_focus_minutes == null) {
+      const total = await this.sumDailyFocusMinutes(userId);
+      await this.userRepo.update(userId, { all_time_focus_minutes: total });
+      return;
+    }
+
+    await this.userRepo.update(userId, {
+      all_time_focus_minutes: user.all_time_focus_minutes + minutes,
+    });
+  }
+
   async applyMinutes(
     userId: string,
     sessionDate: Date,
@@ -109,25 +181,56 @@ export class DailyStatsService {
     minutes: number,
     sessionCount = 0,
   ) {
-    const date = toUserDate(sessionDate, normalizeTimezone(userTimeZone));
-
-    let stat = await this.dailyStatRepo.findOne({
-      where: { user: { id: userId }, date },
-    });
-
-    if (!stat) {
-      stat = this.dailyStatRepo.create({
-        user: { id: userId },
-        date,
-        total_focus_minutes: 0,
-        session_count: 0,
-      });
+    if (minutes <= 0 && sessionCount <= 0) {
+      return null;
     }
 
-    stat.total_focus_minutes += minutes;
-    stat.session_count += sessionCount;
+    const date = toUserDate(sessionDate, normalizeTimezone(userTimeZone));
 
-    return this.dailyStatRepo.save(stat);
+    const applyToExisting = async () => {
+      const stat = await this.dailyStatRepo.findOne({
+        where: { user: { id: userId }, date },
+      });
+      if (!stat) return null;
+      stat.total_focus_minutes += minutes;
+      stat.session_count += sessionCount;
+      return this.dailyStatRepo.save(stat);
+    };
+
+    const touchStreak = async () => {
+      const user = await this.userRepo.findOne({ where: { id: userId } });
+      if (user) await this.streaks.update(user, date);
+    };
+
+    const updated = await applyToExisting();
+    if (updated) {
+      await touchStreak();
+      if (minutes > 0) await this.bumpAllTimeFocusMinutes(userId, minutes);
+      return updated;
+    }
+
+    try {
+      const created = await this.dailyStatRepo.save(
+        this.dailyStatRepo.create({
+          user: { id: userId },
+          date,
+          total_focus_minutes: minutes,
+          session_count: sessionCount,
+        }),
+      );
+      await touchStreak();
+      if (minutes > 0) await this.bumpAllTimeFocusMinutes(userId, minutes);
+      return created;
+    } catch (err) {
+      if (!isDuplicateDailyStatError(err)) throw err;
+      const retried = await applyToExisting();
+      if (!retried) {
+        throw err;
+      }
+      await touchStreak();
+      if (minutes > 0) await this.bumpAllTimeFocusMinutes(userId, minutes);
+      return retried;
+    }
   }
 
   async applySession(session: Session, userTimeZone: string) {

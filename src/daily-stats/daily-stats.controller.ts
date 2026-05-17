@@ -22,4 +22,11 @@ export class DailyStatsController {
   getRange(@Req() req: any, @Query() dto: CalendarRangeDto) {
     return this.dailyStatsService.getRange(req.user.sub, dto.from, dto.to);
   }
+
+  @Get('/all-time')
+  getAllTime(@Req() req: any) {
+    return this.dailyStatsService
+      .getAllTimeFocusMinutes(req.user.sub)
+      .then((total_focus_minutes) => ({ total_focus_minutes }));
+  }
 }

@@ -43,6 +43,10 @@ export class User {
   @Column({ default: 'America/Chicago' })
   time_zone!: string;
 
+  /** Cached sum of focus minutes; backfilled from daily_stats when null. */
+  @Column({ type: 'int', nullable: true })
+  all_time_focus_minutes?: number | null;
+
   @OneToMany(() => Session, (s) => s.user)
   sessions!: Session[];
 
