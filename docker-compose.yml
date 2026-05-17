@@ -26,6 +26,20 @@ services:
     container_name: nest_app
     restart: always
     command: node dist/main.js
+    environment:
+      PORT: 8000
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: password
+      DB_NAME: pomopal
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_password
+    depends_on:
+      - db
+      - redis
 
   nginx:
     image: nginx:alpine

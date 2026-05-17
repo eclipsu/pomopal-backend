@@ -6,6 +6,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import { getCorsOriginConfig } from './config/cors.config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,13 +14,8 @@ async function bootstrap() {
   (app.getHttpAdapter().getInstance() as any).set('trust proxy', 1);
 
   app.enableCors({
-    origin: [
-      'https://pomopal.lol',
-      'https://www.pomopal.lol',
-      'https://pomopal.vercel.app',
-      'http://localhost:3000',
-    ],
-    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
+    origin: getCorsOriginConfig(),
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
 
