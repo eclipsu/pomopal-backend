@@ -1,6 +1,21 @@
 import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions.js';
 
-const isDevelopment = process.env.NODE_ENV === 'development';
+function resolveSsl():
+  | false
+  | { rejectUnauthorized: boolean } {
+  if (process.env.DB_SSL === 'true') {
+    return { rejectUnauthorized: false };
+  }
+  if (process.env.DB_SSL === 'false') {
+    return false;
+  }
+  const host = process.env.DB_HOST ?? '';
+  if (host.includes('neon.tech')) {
+    return { rejectUnauthorized: false };
+  }
+  return false;
+}
+
 export default (): PostgresConnectionOptions => ({
   type: 'postgres',
   host: process.env.DB_HOST,
@@ -10,7 +25,7 @@ export default (): PostgresConnectionOptions => ({
   database: process.env.DB_NAME,
   synchronize: true,
   migrationsRun: true,
-  ssl: isDevelopment ? false : { rejectUnauthorized: false },
+  ssl: resolveSsl(),
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
 });
