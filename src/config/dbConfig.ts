@@ -8,7 +8,6 @@ export default (): PostgresConnectionOptions => ({
   username: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  url: process.env.DATABASE_URL,
   synchronize: true,
   migrationsRun: true,
   ssl: isDevelopment ? false : { rejectUnauthorized: false },

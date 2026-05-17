@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,9 +14,10 @@ async function bootstrap() {
 
   app.enableCors({
     origin: [
+      'https://pomopal.lol',
+      'https://www.pomopal.lol',
       'https://pomopal.vercel.app',
       'http://localhost:3000',
-      'https://www.pomopal.lol/',
     ],
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
     credentials: true,
@@ -30,10 +32,15 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   const port = Number(process.env.PORT) || 8000;
   await app.listen(port, '0.0.0.0');
   console.log(`Server running on port ${port}`);
 }
+
+process.on('unhandledRejection', (reason) => {
+  console.error('FULL TRACE:', reason);
+});
 
 bootstrap();
