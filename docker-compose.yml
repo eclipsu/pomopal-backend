@@ -16,6 +16,7 @@ services:
     env_file:
       - .env
     environment:
+      PORT: 8001
       REDIS_HOST: redis
     depends_on:
       - redis

@@ -18,6 +18,7 @@ import { Friendship } from '../entities/friendship.entity';
 import { PresenceService } from './presence.service';
 import { UpdatePresenceDto } from './dto/update-presence.dto';
 import { PresenceStatus } from './dto/update-presence.dto';
+import { isAllowedCorsOrigin } from '../config/cors.config';
 
 interface AuthSocket extends Socket {
   userId: string;
@@ -68,7 +69,12 @@ export class PresenceGateway
       const token = this.extractToken(client);
       const payload = this.jwtService.verify<{ sub: string }>(token);
       client.userId = payload.sub;
-    } catch {
+    } catch (err) {
+      const reason =
+        err instanceof Error ? err.message : 'invalid or missing token';
+      this.logger.warn(
+        `Connection rejected (socket ${client.id}): ${reason}`,
+      );
       client.disconnect();
       return;
     }
