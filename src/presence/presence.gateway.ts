@@ -37,6 +37,7 @@ interface PresenceBroadcast {
       process.env.APP_URL,
       'https://pomopal.lol',
       'https://www.pomopal.lol',
+      'https://pomopal.vercel.app',
       'http://localhost:3000',
     ].filter(Boolean),
     credentials: true,
@@ -225,7 +226,24 @@ export class PresenceGateway
     return !!friendship;
   }
 
+  broadcastPresenceChanged(
+    userId: string,
+    status: PresenceStatus,
+    custom_status: string | null = null,
+    current_activity: string | null = null,
+  ): void {
+    this.server.to(`user:${userId}`).emit('presence:changed', {
+      userId,
+      status,
+      custom_status,
+      current_activity,
+    } satisfies PresenceBroadcast);
+  }
+
   private extractToken(client: Socket): string {
+    const fromAuth = client.handshake.auth?.token as string | undefined;
+    if (fromAuth) return fromAuth;
+
     const cookies = client.handshake.headers.cookie ?? '';
     const match = cookies
       .split('; ')

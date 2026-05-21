@@ -23,7 +23,13 @@ export class IdleSweepTask {
       this.logger.log(`Marked ${nowIdled.length} user(s) as idle.`);
 
       for (const userId of nowIdled) {
-        this.presenceGateway.broadcastActivityUpdate(userId, null);
+        const presence = await this.presenceService.getPresence(userId);
+        this.presenceGateway.broadcastPresenceChanged(
+          userId,
+          'idle',
+          presence.custom_status,
+          presence.current_activity,
+        );
       }
     }
   }

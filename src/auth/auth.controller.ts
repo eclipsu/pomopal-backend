@@ -12,12 +12,14 @@ import {
   Req,
   Res,
   Get,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import { RefreshAuthGuard } from './guards/refresh-auth/refresh-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth/google-auth.guard';
+import { JwtAuthGuard } from './guards/jwt-auth/jwt-auth.guard';
 import { ConfigService } from '@nestjs/config';
 
 @Controller('auth')
@@ -69,6 +71,20 @@ export class AuthController {
     return res.status(200).json({
       message: 'Logged out and cookies cleared',
     });
+  }
+
+  /**
+   * Short-lived access token for Socket.IO (httpOnly cookies are not sent cross-origin).
+   */
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @Get('socket-token')
+  socketToken(@Req() req: Request & { cookies?: Record<string, string> }) {
+    const token = req.cookies?.['access_token'];
+    if (!token) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+    return { token };
   }
 
   @HttpCode(HttpStatus.OK)
