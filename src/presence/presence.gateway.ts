@@ -18,7 +18,7 @@ import { Friendship } from '../entities/friendship.entity';
 import { PresenceService } from './presence.service';
 import { UpdatePresenceDto } from './dto/update-presence.dto';
 import { PresenceStatus } from './dto/update-presence.dto';
-import { isAllowedCorsOrigin } from '../config/cors.config';
+import { getCorsOriginConfig } from '../config/cors.config';
 
 interface AuthSocket extends Socket {
   userId: string;
@@ -34,13 +34,7 @@ interface PresenceBroadcast {
 @WebSocketGateway({
   namespace: '/presence',
   cors: {
-    origin: [
-      process.env.APP_URL,
-      'https://pomopal.lol',
-      'https://www.pomopal.lol',
-      'https://pomopal.vercel.app',
-      'http://localhost:3000',
-    ].filter(Boolean),
+    origin: getCorsOriginConfig(),
     credentials: true,
   },
 })

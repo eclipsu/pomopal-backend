@@ -3,6 +3,8 @@ const DEFAULT_ORIGINS = [
   'https://www.pomopal.lol',
   'https://pomopal.vercel.app',
   'http://localhost:3000',
+  'http://3.150.110.6',
+  'http://3.150.110.6:80',
 ];
 
 const POMOPAL_ORIGIN = /^https:\/\/([\w-]+\.)?pomopal\.lol$/;
