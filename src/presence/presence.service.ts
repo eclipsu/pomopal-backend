@@ -13,11 +13,12 @@ export interface PresenceData {
   last_seen_at: string | null;
 }
 
-const HEARTBEAT_TTL = 35;
+/** Mark idle when connected but no activity event for this long. */
+export const IDLE_AFTER_MS = 5 * 60 * 1000;
+
 const PRESENCE_TTL = 60 * 60 * 24;
 
 const keys = {
-  heartbeat: (uid: string) => `presence:heartbeat:${uid}`,
   data: (uid: string) => `presence:data:${uid}`,
 };
 
@@ -28,48 +29,39 @@ export class PresenceService {
     private readonly redis: Redis,
   ) {}
 
-  async handleConnect(userId: string): Promise<void> {
-    await this.redis.setex(keys.heartbeat(userId), HEARTBEAT_TTL, '1');
-    await this.patch(userId, {
-      status: 'online',
-      last_seen_at: new Date().toISOString(),
-    });
+  async handleConnect(userId: string): Promise<PresenceData> {
+    return this.touchActive(userId);
   }
 
-  async handleDisconnect(userId: string): Promise<void> {
-    await this.redis.del(keys.heartbeat(userId));
+  async handleDisconnect(userId: string): Promise<PresenceData> {
     await this.patch(userId, {
       status: 'offline',
       last_seen_at: new Date().toISOString(),
     });
+    return (await this.getPresence(userId))!;
   }
 
-  async heartbeat(userId: string): Promise<void> {
-    await this.redis.setex(keys.heartbeat(userId), HEARTBEAT_TTL, '1');
-
-    const current = await this.getPresence(userId);
-    if (current?.status === 'idle') {
-      await this.patch(userId, { status: 'online' });
-    }
+  /** Called on window open/focus, tab visible, or session start/end — not on a timer. */
+  async touchActive(userId: string): Promise<PresenceData> {
+    await this.patch(userId, {
+      status: 'online',
+      last_seen_at: new Date().toISOString(),
+    });
+    return (await this.getPresence(userId))!;
   }
 
   async sweepIdleUsers(userIds: string[]): Promise<string[]> {
     if (!userIds.length) return [];
 
-    const pipeline = this.redis.pipeline();
-    userIds.forEach((uid) => pipeline.exists(keys.heartbeat(uid)));
-    const results = await pipeline.exec();
-
+    const cutoff = Date.now() - IDLE_AFTER_MS;
     const nowIdled: string[] = [];
 
-    for (let i = 0; i < userIds.length; i++) {
-      const alive = results?.[i]?.[1] as number;
-      if (!alive) {
-        const presence = await this.getPresence(userIds[i]);
-        if (presence?.status === 'online') {
-          await this.patch(userIds[i], { status: 'idle' });
-          nowIdled.push(userIds[i]);
-        }
+    for (const uid of userIds) {
+      const presence = await this.getPresence(uid);
+      if (presence.status !== 'online' || !presence.last_seen_at) continue;
+      if (new Date(presence.last_seen_at).getTime() <= cutoff) {
+        await this.patch(uid, { status: 'idle' });
+        nowIdled.push(uid);
       }
     }
 
@@ -90,13 +82,6 @@ export class PresenceService {
 
     await this.patch(userId, updates);
     return (await this.getPresence(userId))!;
-  }
-
-  async setCurrentActivity(
-    userId: string,
-    activity: string | null,
-  ): Promise<void> {
-    await this.patch(userId, { current_activity: activity });
   }
 
   async getPresence(userId: string): Promise<PresenceData> {
@@ -127,11 +112,6 @@ export class PresenceService {
     return map;
   }
 
-  async getOnlineUserIds(): Promise<string[]> {
-    const heartbeatKeys = await this.scanKeys('presence:heartbeat:*');
-    return heartbeatKeys.map((k) => k.replace('presence:heartbeat:', ''));
-  }
-
   private async patch(
     userId: string,
     updates: Partial<PresenceData>,
@@ -152,23 +132,5 @@ export class PresenceService {
       PRESENCE_TTL,
       JSON.stringify(next),
     );
-  }
-  private async scanKeys(pattern: string): Promise<string[]> {
-    const found: string[] = [];
-    let cursor = '0';
-
-    do {
-      const [next, batch] = await this.redis.scan(
-        cursor,
-        'MATCH',
-        pattern,
-        'COUNT',
-        100,
-      );
-      cursor = next;
-      found.push(...batch);
-    } while (cursor !== '0');
-
-    return found;
   }
 }

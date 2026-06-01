@@ -14,22 +14,16 @@ export class IdleSweepTask {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async sweepIdle(): Promise<void> {
-    const onlineIds = await this.presenceService.getOnlineUserIds();
-    if (!onlineIds.length) return;
+    const connectedIds = this.presenceGateway.getConnectedUserIds();
+    if (!connectedIds.length) return;
 
-    const nowIdled = await this.presenceService.sweepIdleUsers(onlineIds);
+    const nowIdled = await this.presenceService.sweepIdleUsers(connectedIds);
 
     if (nowIdled.length) {
       this.logger.log(`Marked ${nowIdled.length} user(s) as idle.`);
 
       for (const userId of nowIdled) {
-        const presence = await this.presenceService.getPresence(userId);
-        this.presenceGateway.broadcastPresenceChanged(
-          userId,
-          'idle',
-          presence.custom_status,
-          presence.current_activity,
-        );
+        this.presenceGateway.broadcastPresenceChanged(userId, 'idle');
       }
     }
   }

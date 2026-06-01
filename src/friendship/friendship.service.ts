@@ -451,13 +451,10 @@ export class FriendshipService {
     if (presence && visibility.show_online_status) {
       profile.status = presence.status;
       profile.custom_status = presence.custom_status;
-      if (presence.last_seen_at) {
-        profile.last_seen_at = presence.last_seen_at;
-      }
     }
 
-    if (presence && visibility.show_current_activity) {
-      profile.current_activity = presence.current_activity;
+    if (presence && visibility.show_current_activity && presence.last_seen_at) {
+      profile.last_seen_at = presence.last_seen_at;
     }
 
     return profile;

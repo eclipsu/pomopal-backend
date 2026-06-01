@@ -15,7 +15,7 @@ import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { Friendship } from '../entities/friendship.entity';
-import { PresenceService } from './presence.service';
+import { PresenceService, PresenceData } from './presence.service';
 import { UpdatePresenceDto } from './dto/update-presence.dto';
 import { PresenceStatus } from './dto/update-presence.dto';
 import { getCorsOriginConfig } from '../config/cors.config';
@@ -28,7 +28,7 @@ interface PresenceBroadcast {
   userId: string;
   status: PresenceStatus;
   custom_status: string | null;
-  current_activity: string | null;
+  last_seen_at: string | null;
 }
 
 @WebSocketGateway({
@@ -56,6 +56,10 @@ export class PresenceGateway
     private readonly friendshipRepo: Repository<Friendship>,
   ) {}
 
+  getConnectedUserIds(): string[] {
+    return [...this.userSockets.keys()];
+  }
+
   // ─── Connection lifecycle ────────────────────────────────────────────────────
 
   async handleConnection(client: AuthSocket): Promise<void> {
@@ -76,25 +80,15 @@ export class PresenceGateway
     const { userId } = client;
     this.logger.log(`User ${userId} connected (socket ${client.id})`);
 
-    // Track socket
     if (!this.userSockets.has(userId)) {
       this.userSockets.set(userId, new Set());
     }
     this.userSockets.get(userId)!.add(client.id);
 
-    // Each user joins their own room — friends subscribe to this room from client
     await client.join(`user:${userId}`);
 
-    // Mark online
     await this.presenceService.handleConnect(userId);
-
-    // Broadcast to anyone subscribed to this user's room
-    this.server.to(`user:${userId}`).emit('presence:changed', {
-      userId,
-      status: 'online',
-      custom_status: null,
-      current_activity: null,
-    } satisfies PresenceBroadcast);
+    await this.broadcastPresence(userId);
   }
 
   async handleDisconnect(client: AuthSocket): Promise<void> {
@@ -106,35 +100,22 @@ export class PresenceGateway
     const sockets = this.userSockets.get(userId);
     sockets?.delete(client.id);
 
-    // Only go offline if ALL tabs closed
     if (!sockets || sockets.size === 0) {
       this.userSockets.delete(userId);
       await this.presenceService.handleDisconnect(userId);
-
-      this.server.to(`user:${userId}`).emit('presence:changed', {
-        userId,
-        status: 'offline',
-        custom_status: null,
-        current_activity: null,
-      } satisfies PresenceBroadcast);
+      await this.broadcastPresence(userId);
     }
   }
 
   // ─── Client events ───────────────────────────────────────────────────────────
 
-  /**
-   * Client sends every 30s to stay online.
-   */
-  @SubscribeMessage('presence:heartbeat')
-  async handleHeartbeat(@ConnectedSocket() client: AuthSocket): Promise<void> {
-    await this.presenceService.heartbeat(client.userId);
+  /** Window open/focus, tab visible, session start/end — not periodic heartbeat. */
+  @SubscribeMessage('presence:active')
+  async handleActive(@ConnectedSocket() client: AuthSocket): Promise<void> {
+    await this.presenceService.touchActive(client.userId);
+    await this.broadcastPresence(client.userId);
   }
 
-  /**
-   * Client subscribes to a friend's presence room.
-   * Frontend calls this after fetching the friend list.
-   * Payload: { friendId: string }
-   */
   @SubscribeMessage('presence:subscribe')
   async handleSubscribe(
     @ConnectedSocket() client: AuthSocket,
@@ -147,22 +128,10 @@ export class PresenceGateway
 
     await client.join(`user:${data.friendId}`);
 
-    // Send current presence snapshot for this friend immediately
     const presence = await this.presenceService.getPresence(data.friendId);
-    if (presence) {
-      client.emit('presence:changed', {
-        userId: data.friendId,
-        status: presence.status,
-        custom_status: presence.custom_status,
-        current_activity: presence.current_activity,
-      } satisfies PresenceBroadcast);
-    }
+    client.emit('presence:changed', this.toBroadcast(data.friendId, presence));
   }
 
-  /**
-   * Client unsubscribes from a friend's presence room (e.g. after unfriend).
-   * Payload: { friendId: string }
-   */
   @SubscribeMessage('presence:unsubscribe')
   async handleUnsubscribe(
     @ConnectedSocket() client: AuthSocket,
@@ -171,9 +140,6 @@ export class PresenceGateway
     await client.leave(`user:${data.friendId}`);
   }
 
-  /**
-   * Client updates custom status or activity manually.
-   */
   @SubscribeMessage('presence:update')
   async handlePresenceUpdate(
     @ConnectedSocket() client: AuthSocket,
@@ -184,27 +150,34 @@ export class PresenceGateway
       dto,
     );
 
-    const broadcast: PresenceBroadcast = {
-      userId: client.userId,
-      status: updated.status,
-      custom_status: updated.custom_status,
-      current_activity: updated.current_activity,
-    };
-
+    const broadcast = this.toBroadcast(client.userId, updated);
     client.emit('presence:updated', broadcast);
     this.server.to(`user:${client.userId}`).emit('presence:changed', broadcast);
   }
 
-  // ─── Called externally (e.g. PomodoroService) ────────────────────────────────
-
-  broadcastActivityUpdate(userId: string, activity: string | null): void {
-    this.server.to(`user:${userId}`).emit('presence:activity', {
-      userId,
-      current_activity: activity,
+  broadcastPresenceChanged(userId: string, status: PresenceStatus): void {
+    void this.presenceService.getPresence(userId).then((presence) => {
+      this.server
+        .to(`user:${userId}`)
+        .emit('presence:changed', this.toBroadcast(userId, { ...presence, status }));
     });
   }
 
-  // ─── Token extraction ─────────────────────────────────────────────────────────
+  private async broadcastPresence(userId: string): Promise<void> {
+    const presence = await this.presenceService.getPresence(userId);
+    this.server
+      .to(`user:${userId}`)
+      .emit('presence:changed', this.toBroadcast(userId, presence));
+  }
+
+  private toBroadcast(userId: string, presence: PresenceData): PresenceBroadcast {
+    return {
+      userId,
+      status: presence.status,
+      custom_status: presence.custom_status,
+      last_seen_at: presence.last_seen_at,
+    };
+  }
 
   private async canViewPresence(
     viewerId: string,
@@ -224,20 +197,6 @@ export class PresenceGateway
       .getOne();
 
     return !!friendship;
-  }
-
-  broadcastPresenceChanged(
-    userId: string,
-    status: PresenceStatus,
-    custom_status: string | null = null,
-    current_activity: string | null = null,
-  ): void {
-    this.server.to(`user:${userId}`).emit('presence:changed', {
-      userId,
-      status,
-      custom_status,
-      current_activity,
-    } satisfies PresenceBroadcast);
   }
 
   private extractToken(client: Socket): string {
