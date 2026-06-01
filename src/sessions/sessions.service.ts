@@ -102,6 +102,7 @@ export class SessionsService {
           session.user.id,
           streak.current_streak,
           session.user.time_zone,
+          session.user.email,
         );
       }
     }

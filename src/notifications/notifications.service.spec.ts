@@ -89,6 +89,31 @@ describe('NotificationsService', () => {
     );
     expect(types).toContain('focus_complete');
     expect(types).toContain('streak_milestone');
+    expect(mailService.sendAnnouncement).not.toHaveBeenCalled();
+  });
+
+  it('emails streak milestone and focus complete when address provided', async () => {
+    prefsRepo.findOneBy.mockResolvedValue({
+      user_id: 'user-1',
+      streak_updates: true,
+    });
+    notificationRepo.findOne.mockResolvedValue(null);
+    notificationRepo.save.mockImplementation(async (row) => ({
+      ...row,
+      id: 'n-1',
+    }));
+
+    await service.onPomodoroComplete(
+      'user-1',
+      7,
+      'America/Chicago',
+      'user@example.com',
+    );
+
+    expect(mailService.sendAnnouncement).toHaveBeenCalledTimes(2);
+    expect(mailService.sendAnnouncement).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'user@example.com' }),
+    );
   });
 
   it('respects streak_nudges preference for at-risk', async () => {

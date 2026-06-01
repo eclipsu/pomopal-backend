@@ -131,6 +131,7 @@ export class NotificationsService {
     userId: string,
     currentStreak: number,
     userTimeZone: string,
+    email?: string,
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     const tz = normalizeTimezone(userTimeZone);
@@ -138,17 +139,20 @@ export class NotificationsService {
 
     if (prefs.streak_updates) {
       const { title, body } = focusCompleteCopy();
-      await this.createIfNew({
+      const focusCreated = await this.createIfNew({
         userId,
         type: 'focus_complete',
         title,
         body,
         dedupeKey: dedupeKey('focus_complete', userId, today),
       });
+      if (focusCreated && email) {
+        await this.sendNudgeEmail(email, title, body);
+      }
 
       if ((STREAK_MILESTONES as readonly number[]).includes(currentStreak)) {
         const milestone = streakMilestoneCopy(currentStreak);
-        await this.createIfNew({
+        const milestoneCreated = await this.createIfNew({
           userId,
           type: 'streak_milestone',
           title: milestone.title,
@@ -159,6 +163,9 @@ export class NotificationsService {
             String(currentStreak),
           ),
         });
+        if (milestoneCreated && email) {
+          await this.sendNudgeEmail(email, milestone.title, milestone.body);
+        }
       }
     }
   }
