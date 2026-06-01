@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -16,6 +17,8 @@ import { normalizeTimezone, toUserDate } from '../common/time';
 
 @Injectable()
 export class SessionsService {
+  private readonly logger = new Logger(SessionsService.name);
+
   constructor(
     @InjectRepository(Session) private sessionRepo: Repository<Session>,
     @InjectRepository(User) private userRepo: Repository<User>,
@@ -96,13 +99,19 @@ export class SessionsService {
         );
       }
 
-      const streak = await this.streakService.getRecord(session.user.id);
-      if (streak) {
+      try {
+        const streak = await this.streakService.getRecord(session.user.id);
         await this.notificationsService.onPomodoroComplete(
           session.user.id,
-          streak.current_streak,
+          sessionId,
+          streak?.current_streak ?? 0,
           session.user.time_zone,
           session.user.email,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Notifications failed for session ${sessionId}`,
+          err instanceof Error ? err.stack : String(err),
         );
       }
     }

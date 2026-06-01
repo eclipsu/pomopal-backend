@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository, IsNull } from 'typeorm';
 import {
@@ -16,11 +16,6 @@ import {
   streakAtRiskCopy,
   streakMilestoneCopy,
 } from './notification-copy';
-import {
-  normalizeTimezone,
-  streakDateToYmd,
-  todayInTz,
-} from '../common/time';
 import { MailService } from '../mail/mail.service';
 
 interface CreateParams {
@@ -41,6 +36,8 @@ function isDuplicateKeyError(err: unknown): boolean {
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepo: Repository<Notification>,
@@ -126,16 +123,15 @@ export class NotificationsService {
     );
   }
 
-  /** After a completed pomodoro — milestone + optional daily celebration. */
+  /** After a completed pomodoro — milestone + session celebration. */
   async onPomodoroComplete(
     userId: string,
+    sessionId: string,
     currentStreak: number,
-    userTimeZone: string,
+    _userTimeZone: string,
     email?: string,
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
-    const tz = normalizeTimezone(userTimeZone);
-    const today = todayInTz(tz);
 
     if (prefs.streak_updates) {
       const { title, body } = focusCompleteCopy();
@@ -144,7 +140,7 @@ export class NotificationsService {
         type: 'focus_complete',
         title,
         body,
-        dedupeKey: dedupeKey('focus_complete', userId, today),
+        dedupeKey: dedupeKey('focus_complete', userId, sessionId),
       });
       if (focusCreated && email) {
         await this.sendNudgeEmail(email, title, body);
@@ -247,10 +243,18 @@ export class NotificationsService {
     title: string,
     body: string,
   ): Promise<void> {
+    if (!this.mailService.isConfigured()) {
+      this.logger.warn(`SMTP not configured; skipped email to ${to}`);
+      return;
+    }
+
     try {
       await this.mailService.sendAnnouncement({ to, title, body });
-    } catch {
-      // SMTP optional in dev — in-app notification still delivered
+    } catch (err) {
+      this.logger.error(
+        `Failed to email ${to}: ${title}`,
+        err instanceof Error ? err.stack : String(err),
+      );
     }
   }
 }

@@ -29,7 +29,19 @@ export class MailService {
     });
   }
 
+  isConfigured(): boolean {
+    return Boolean(
+      this.config.get<string>('SMTP_HOST') &&
+        this.config.get<string>('SMTP_USER') &&
+        this.config.get<string>('SMTP_PASS') &&
+        this.config.get<string>('SMTP_FROM'),
+    );
+  }
+
   async sendAnnouncement(opts: SendAnnouncementOptions): Promise<void> {
+    if (!this.isConfigured()) {
+      throw new Error('SMTP is not configured');
+    }
     await sendAnnouncementEmail(
       {
         host: this.config.get<string>('SMTP_HOST')!,

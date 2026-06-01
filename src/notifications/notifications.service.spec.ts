@@ -25,6 +25,7 @@ describe('NotificationsService', () => {
 
   const mailService = {
     sendAnnouncement: jest.fn(),
+    isConfigured: jest.fn().mockReturnValue(true),
   };
 
   beforeEach(async () => {
@@ -81,7 +82,12 @@ describe('NotificationsService', () => {
       id: 'n-1',
     }));
 
-    await service.onPomodoroComplete('user-1', 7, 'America/Chicago');
+    await service.onPomodoroComplete(
+      'user-1',
+      'session-1',
+      7,
+      'America/Chicago',
+    );
 
     expect(notificationRepo.save).toHaveBeenCalled();
     const types = notificationRepo.save.mock.calls.map(
@@ -105,6 +111,7 @@ describe('NotificationsService', () => {
 
     await service.onPomodoroComplete(
       'user-1',
+      'session-1',
       7,
       'America/Chicago',
       'user@example.com',
