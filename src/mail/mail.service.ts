@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import {
+  sendAnnouncementEmail,
+  SendAnnouncementOptions,
+} from './announcement-email';
 
 interface FriendInviteOptions {
   to: string;
@@ -23,6 +27,21 @@ export class MailService {
         pass: config.get<string>('SMTP_PASS'),
       },
     });
+  }
+
+  async sendAnnouncement(opts: SendAnnouncementOptions): Promise<void> {
+    await sendAnnouncementEmail(
+      {
+        host: this.config.get<string>('SMTP_HOST')!,
+        port: this.config.get<number>('SMTP_PORT', 587),
+        secure: this.config.get<string>('SMTP_SECURE') === 'true',
+        user: this.config.get<string>('SMTP_USER')!,
+        pass: this.config.get<string>('SMTP_PASS')!,
+        from: this.config.get<string>('SMTP_FROM')!,
+        fromName: this.config.get<string>('SMTP_FROM_NAME', 'Pomopal'),
+      },
+      opts,
+    );
   }
 
   async sendFriendInvite(opts: FriendInviteOptions): Promise<void> {

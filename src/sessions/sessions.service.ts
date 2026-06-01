@@ -10,6 +10,7 @@ import { Session, SessionType } from '../entities/sessions.entity';
 import { SessionResponseDto } from './dto/response-dto';
 import { DailyStatsService } from 'src/daily-stats/daily-stats.service';
 import { StreaksService } from 'src/streaks/streaks.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 import { User } from 'src/entities/user.entity';
 import { normalizeTimezone, toUserDate } from '../common/time';
 
@@ -20,6 +21,7 @@ export class SessionsService {
     @InjectRepository(User) private userRepo: Repository<User>,
     private readonly dailyStatsService: DailyStatsService,
     private readonly streakService: StreaksService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   findAll() {
@@ -89,7 +91,17 @@ export class SessionsService {
         session.started_at,
         normalizeTimezone(session.user.time_zone),
         delta,
+        1,
       );
+
+      const streak = await this.streakService.getRecord(session.user.id);
+      if (streak) {
+        await this.notificationsService.onPomodoroComplete(
+          session.user.id,
+          streak.current_streak,
+          session.user.time_zone,
+        );
+      }
     }
 
     return this.toResponse(saved);

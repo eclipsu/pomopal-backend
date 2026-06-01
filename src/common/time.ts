@@ -45,3 +45,17 @@ export function streakDateToYmd(
   if (Number.isNaN(d.getTime())) return null;
   return toUserDate(d, tz);
 }
+
+/** Current hour (0–23) in the user's IANA timezone. */
+export function localHourInTz(tz: string): number {
+  const zone = normalizeTimezone(tz);
+  return Number(format(toZonedTime(new Date(), zone), 'H', { timeZone: zone }));
+}
+
+export function daysBetweenYmd(from: string, to: string): number {
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  const a = Date.UTC(fy, fm - 1, fd);
+  const b = Date.UTC(ty, tm - 1, td);
+  return Math.round((b - a) / 86_400_000);
+}

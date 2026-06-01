@@ -1,27 +1,33 @@
-import { Column, OneToOne } from 'typeorm';
-import { Entity } from 'typeorm';
-import { PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  OneToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { User } from './user.entity';
-import { JoinColumn } from 'typeorm';
 
-@Entity()
-export class NotficationPreferences {
+@Entity('notification_preferences')
+export class NotificationPreferences {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
+
+  @Column('uuid', { unique: true })
+  user_id!: string;
 
   @OneToOne(() => User, { onDelete: 'CASCADE' })
-  @JoinColumn()
-  user: User;
+  @JoinColumn({ name: 'user_id' })
+  user!: User;
 
   @Column({ default: true })
-  streak_updates: boolean;
+  streak_updates!: boolean;
 
   @Column({ default: true })
-  streak_nudges: boolean;
+  streak_nudges!: boolean;
 
   @Column({ default: true })
-  inactive_reminders: boolean;
+  inactive_reminders!: boolean;
 
   @Column({ default: true })
-  weekly_summaries: boolean;
+  product_announcements!: boolean;
 }

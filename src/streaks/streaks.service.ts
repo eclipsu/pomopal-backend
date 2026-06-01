@@ -17,6 +17,12 @@ export class StreaksService {
     @InjectRepository(User) private userRepo: Repository<User>,
   ) {}
 
+  async getRecord(userId: string): Promise<Streak | null> {
+    return this.streakRepo.findOne({
+      where: { user: { id: userId } },
+    });
+  }
+
   async update(user: User, date: string) {
     let streak = await this.streakRepo.findOne({
       where: { user: { id: user.id } },

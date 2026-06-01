@@ -14,6 +14,7 @@ import { PrivacyModule } from './privacy/privacy.module';
 import { MailModule } from './mail/mail.module';
 import { PresenceModule } from './presence/presence.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import jwtConfig from './auth/config/jwt.config';
 
 @Module({
@@ -32,6 +33,7 @@ import jwtConfig from './auth/config/jwt.config';
     MailModule,
     PresenceModule,
     LeaderboardModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
