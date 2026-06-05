@@ -6,85 +6,98 @@ const pick = <T>(items: T[]): T =>
 
 export const APP_LINK = 'https://pomopal.lol';
 
-
-export function streakAtRiskCopy(streak: number, isLastChance = false): { title: string; body: string } {
+export function streakAtRiskCopy(
+  streak: number,
+  isLastChance = false,
+): { title: string; body: string } {
   if (isLastChance) {
-    return {  
-      title: `Last chance. ${streak}-day streak.`,
+    return {
+      title: `Last chance. ${streak} days. Don't you dare.`,
       body: pick([
-        `You really made it ${streak} days just to lose it before midnight? ${APP_LINK}`,
-        `One pomodoro right now saves your streak. That's it. ${APP_LINK}`,
-        `This streak survived bad moods and lazy days. Don't let tonight end it. ${APP_LINK}`,
-        `Future you is going to be really annoyed if you lose this streak tonight. ${APP_LINK}`,
-        `Your streak only needs 1 minutes from you. ${APP_LINK}`,
-      ] ),
+        `You survived ${streak} days and you're gonna blow it before midnight?? Come on. ${APP_LINK}`,
+        `One pomodoro. That's literally all I'm asking. One. ${APP_LINK}`,
+        `This streak has seen bad days, lazy days, "I'll do it later" days. Don't let tonight be the one that kills it. ${APP_LINK}`,
+        `Future you WILL be annoyed about this. I'm giving you the chance to not be that person. ${APP_LINK}`,
+        `Your streak needs like 25 minutes. You've spent longer looking for what to watch. ${APP_LINK}`,
+      ]),
     };
   }
 
   return {
-    title: `${streak}-day streak on the line`,
+    title: `Your ${streak}-day streak is getting nervous`,
     body: pick([
-      `You've shown up ${streak} days in a row. Keep it alive tonight. ${APP_LINK}`,
-      `Remember how hard Day 1 was? Don't restart the pain. ${APP_LINK}`,
-      `You don't need motivation tonight. You just need to start. ${APP_LINK}`,
-      `One small focus session now saves tomorrow's regret. ${APP_LINK}`,
-      `Your streak has survived worse days than this one. ${APP_LINK}`,
+      `${streak} days straight and you're thinking about skipping tonight? Bold. ${APP_LINK}`,
+      `Remember day 1? Yeah. Don't make yourself do that again. ${APP_LINK}`,
+      `You don't need to feel like it. You just need to start. Big difference. ${APP_LINK}`,
+      `One session now or regret later. Pretty easy math tbh. ${APP_LINK}`,
+      `Your streak has outlasted worse moods than whatever you've got going on right now. ${APP_LINK}`,
     ]),
   };
 }
-export function streakMilestoneCopy(streak: number): { title: string; body: string } {
+
+export function streakMilestoneCopy(streak: number): {
+  title: string;
+  body: string;
+} {
   return {
-    title: `${streak} days in a row`,
+    title: `${streak} days?? Okay I see you.`,
     body: pick([
-      `${streak} days ago this was just another app. Now it's part of your routine. ${APP_LINK}`,
-      `Most people quit before this point. You didn't. ${APP_LINK}`,
-      `${streak} straight days of showing up for yourself is actually impressive. ${APP_LINK}`,
-      `At this point your streak is basically a personality trait. ${APP_LINK}`,
-      `You kept going on busy days too. That's what makes this count. ${APP_LINK}`,
-      `This stopped being motivation a while ago. It's just who you are now. ${APP_LINK}`,
-      `A lot of people say they'll stay consistent. You actually did it. ${APP_LINK}`,
-      `Your past self would be shocked you made it to ${streak} days. ${APP_LINK}`,
-      `${streak} days later and you still came back today. ${APP_LINK}`,
-      `Consistency looks boring until you realize how rare it is. ${APP_LINK}`,
+      `${streak} days ago this was just some app you downloaded. Look at you now. ${APP_LINK}`,
+      `Most people quit way before this. You are not most people (compliment). ${APP_LINK}`,
+      `${streak} days in a row. That's genuinely kind of insane. In a good way. ${APP_LINK}`,
+      `At this point your streak is basically a personality trait and honestly it's a good one. ${APP_LINK}`,
+      `You showed up on the busy days too. That's the part that actually matters. ${APP_LINK}`,
+      `It stopped being a habit a while ago. It's just who you are now. Kinda cool. ${APP_LINK}`,
+      `You said you'd be consistent and then you actually were?? Rare. ${APP_LINK}`,
+      `Your past self would be embarrassingly proud right now. ${APP_LINK}`,
+      `${streak} days and you came back today anyway. I respect it. ${APP_LINK}`,
+      `Consistency is boring until you realize almost nobody actually does it. You do. ${APP_LINK}`,
     ]),
   };
 }
 
 export function dailyNudgeCopy(): { title: string; body: string } {
   return {
-    title: `Time for a pomodoro?`,
+    title: `Hey. Pomodoro time.`,
     body: pick([
-      `Your task is probably less painful than avoiding it. ${APP_LINK}`,
-      `Do one pomodoro before your brain opens 14 useless tabs again. ${APP_LINK}`,
-      `Starting is usually the hardest part. ${APP_LINK}`,
-      `Tiny progress still counts today. ${APP_LINK}`,
-      `You don't have to finish everything. Just begin. ${APP_LINK}`,
+      `The task is probably less awful than the anxiety of avoiding it. Just saying. ${APP_LINK}`,
+      `Do one session before your brain opens 14 tabs and calls it "research." ${APP_LINK}`,
+      `Starting is the hard part. Everything after that is just vibing. ${APP_LINK}`,
+      `Small progress still counts. Tiny wins are wins. ${APP_LINK}`,
+      `You don't have to finish it. You just have to start. That's the whole trick. ${APP_LINK}`,
     ]),
   };
 }
 
-export function comebackCopy(daysAway: number): { title: string; body: string } {
+export function comebackCopy(daysAway: number): {
+  title: string;
+  body: string;
+} {
   return {
-    title: `It's been ${daysAway} days`,
+    title: `${daysAway} days? Welcome back, weirdo.`,
     body: pick([
-      `The streak is gone but you're not starting from zero — you know how to do this. ${APP_LINK}`,
-      `${daysAway} days off means today feels harder than it is. Do one session anyway. ${APP_LINK}`,
-      `You stopped ${daysAway} days ago for a reason. That reason probably isn't relevant anymore. ${APP_LINK}`,
+      `Streak's gone but you're not starting from zero — you already know how to do this. ${APP_LINK}`,
+      `${daysAway} days off just means today feels harder than it actually is. Do one session anyway. ${APP_LINK}`,
+      `Whatever kept you away for ${daysAway} days — it's probably not relevant anymore. Let's go. ${APP_LINK}`,
     ]),
   };
 }
 
 export function focusCompleteCopy(): { title: string; body: string } {
   return {
-    title: `Pomodoro complete`,
+    title: `Pomodoro done. Nice.`,
     body: pick([
-      `That's the part of the day you won't regret. ${APP_LINK}`,
-      `Whatever you were avoiding, you did it anyway. That counts. ${APP_LINK}`,
-      `25 minutes of actual work. Most people didn't do that today. ${APP_LINK}`,
+      `That's the part of the day you won't cringe about later. ${APP_LINK}`,
+      `You were avoiding it and you did it anyway. That's actually the whole skill. ${APP_LINK}`,
+      `25 minutes of real work. Genuinely most people didn't do that today. ${APP_LINK}`,
     ]),
   };
 }
 
-export function dedupeKey(type: NotificationType, userId: string, id: string): string {
+export function dedupeKey(
+  type: NotificationType,
+  userId: string,
+  id: string,
+): string {
   return `${type}:${userId}:${id}`;
 }
