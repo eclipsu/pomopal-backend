@@ -26,6 +26,13 @@ interface CreateParams {
   dedupeKey: string;
 }
 
+export const IMAGES = {
+  mad: 'https://pomopal.s3.us-east-2.amazonaws.com/pomo-mad.png',
+  sad: 'https://pomopal.s3.us-east-2.amazonaws.com/pomo-sad.png',
+  yay: 'https://pomopal.s3.us-east-2.amazonaws.com/pomo-yay.png',
+  super: 'https://pomopal.s3.us-east-2.amazonaws.com/pomo-super.png',
+} as const;
+
 function isDuplicateKeyError(err: unknown): boolean {
   return (
     err instanceof QueryFailedError &&
@@ -49,9 +56,7 @@ export class NotificationsService {
   async ensurePreferences(userId: string): Promise<NotificationPreferences> {
     const existing = await this.prefsRepo.findOneBy({ user_id: userId });
     if (existing) return existing;
-    return this.prefsRepo.save(
-      this.prefsRepo.create({ user_id: userId }),
-    );
+    return this.prefsRepo.save(this.prefsRepo.create({ user_id: userId }));
   }
 
   async getPreferences(userId: string): Promise<NotificationPreferences> {
@@ -123,7 +128,7 @@ export class NotificationsService {
     );
   }
 
-  /** After a completed pomodoro — milestone + session celebration. */
+
   async onPomodoroComplete(
     userId: string,
     sessionId: string,
@@ -132,20 +137,8 @@ export class NotificationsService {
     email?: string,
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
-
+  
     if (prefs.streak_updates) {
-      const { title, body } = focusCompleteCopy();
-      const focusCreated = await this.createIfNew({
-        userId,
-        type: 'focus_complete',
-        title,
-        body,
-        dedupeKey: dedupeKey('focus_complete', userId, sessionId),
-      });
-      if (focusCreated && email) {
-        await this.sendNudgeEmail(email, title, body);
-      }
-
       if ((STREAK_MILESTONES as readonly number[]).includes(currentStreak)) {
         const milestone = streakMilestoneCopy(currentStreak);
         const milestoneCreated = await this.createIfNew({
@@ -153,42 +146,40 @@ export class NotificationsService {
           type: 'streak_milestone',
           title: milestone.title,
           body: milestone.body,
-          dedupeKey: dedupeKey(
-            'streak_milestone',
-            userId,
-            String(currentStreak),
-          ),
+          dedupeKey: dedupeKey('streak_milestone', userId, String(currentStreak)),
         });
         if (milestoneCreated && email) {
-          await this.sendNudgeEmail(email, milestone.title, milestone.body);
+          await this.sendNudgeEmail(email, milestone.title, milestone.body, IMAGES.yay);
         }
       }
     }
   }
-
+  
   async notifyStreakAtRisk(
     userId: string,
     currentStreak: number,
     today: string,
     email?: string,
+    isLastChance = false,
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.streak_nudges) return;
-
-    const copy = streakAtRiskCopy(currentStreak);
+  
+    const copy = streakAtRiskCopy(currentStreak, isLastChance);
+    // different dedupe key so both 9PM and 11PM can fire
+    const suffix = isLastChance ? `${today}:last` : `${today}:early`;
     const created = await this.createIfNew({
       userId,
       type: 'streak_at_risk',
       title: copy.title,
       body: copy.body,
-      dedupeKey: dedupeKey('streak_at_risk', userId, today),
+      dedupeKey: dedupeKey('streak_at_risk', userId, suffix),
     });
-
+  
     if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body);
+      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.mad);
     }
   }
-
   async notifyDailyNudge(
     userId: string,
     today: string,
@@ -207,7 +198,7 @@ export class NotificationsService {
     });
 
     if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body);
+      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.sad);
     }
   }
 
@@ -229,7 +220,7 @@ export class NotificationsService {
     });
 
     if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body);
+      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.sad);
     }
   }
 
@@ -242,14 +233,14 @@ export class NotificationsService {
     to: string,
     title: string,
     body: string,
+    imageUrl?: string,
   ): Promise<void> {
     if (!this.mailService.isConfigured()) {
       this.logger.warn(`SMTP not configured; skipped email to ${to}`);
       return;
     }
-
     try {
-      await this.mailService.sendAnnouncement({ to, title, body });
+      await this.mailService.sendAnnouncement({ to, title, body, imageUrl });
     } catch (err) {
       this.logger.error(
         `Failed to email ${to}: ${title}`,

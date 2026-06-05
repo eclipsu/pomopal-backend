@@ -10,6 +10,8 @@ import { MailModule } from '../mail/mail.module';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationScheduler } from './notification-scheduler';
+import { StreaksModule } from '../streaks/streaks.module';
+
 
 @Module({
   imports: [
@@ -22,6 +24,7 @@ import { NotificationScheduler } from './notification-scheduler';
       DailyStat,
     ]),
     MailModule,
+    StreaksModule
   ],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationScheduler],

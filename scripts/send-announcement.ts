@@ -6,6 +6,7 @@
  *   npm run script:send-announcement -- "Title" "Body"
  *   npm run script:send-announcement -- --dry-run "Title" "Body"
  *   npm run script:send-announcement -- --no-email "Title" "Body"
+ *   npm run script:send-announcement -- --image https://pomopal.lol/og.png --link https://pomopal.lol --cta "Open Pomopal" "Title" "Body"
  */
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
@@ -50,11 +51,33 @@ function parseArgs(argv: string[]): {
   sendEmail: boolean;
   title: string;
   body: string;
+  imageUrl?: string;
+  link?: string;
+  ctaLabel: string;
 } {
   const args = [...argv];
   const dryRun = args.includes('--dry-run');
   const sendEmail = !args.includes('--no-email');
-  const filtered = args.filter((a) => a !== '--dry-run' && a !== '--no-email');
+
+  const getFlag = (flag: string): string | undefined => {
+    const i = args.indexOf(flag);
+    if (i === -1) return undefined;
+    return args[i + 1];
+  };
+
+  const imageUrl = getFlag('--image');
+  const link = getFlag('--link');
+  const ctaLabel = getFlag('--cta') ?? 'Open Pomopal';
+
+  const filtered = args.filter(
+    (_, i, arr) =>
+      arr[i - 1] !== '--image' &&
+      arr[i - 1] !== '--link' &&
+      arr[i - 1] !== '--cta' &&
+      !['--dry-run', '--no-email', '--image', '--link', '--cta'].includes(
+        args[i],
+      ),
+  );
 
   if (filtered.length === 0) {
     console.error(
@@ -65,7 +88,15 @@ function parseArgs(argv: string[]): {
   }
 
   if (filtered.length === 1) {
-    return { dryRun, sendEmail, title: 'Announcement', body: filtered[0] };
+    return {
+      dryRun,
+      sendEmail,
+      title: 'Announcement',
+      body: filtered[0],
+      imageUrl,
+      link,
+      ctaLabel,
+    };
   }
 
   return {
@@ -73,6 +104,9 @@ function parseArgs(argv: string[]): {
     sendEmail,
     title: filtered[0],
     body: filtered.slice(1).join(' '),
+    imageUrl,
+    link,
+    ctaLabel,
   };
 }
 
@@ -99,7 +133,8 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const { dryRun, sendEmail, title, body } = parseArgs(process.argv.slice(2));
+  const { dryRun, sendEmail, title, body, imageUrl, link, ctaLabel } =
+    parseArgs(process.argv.slice(2));
 
   if (!body.trim()) {
     console.error('Body cannot be empty.');
@@ -138,6 +173,8 @@ async function main(): Promise<void> {
     console.log(`Body:  ${body}`);
     console.log(`Users: ${users.length}`);
     console.log(`Email: ${sendEmail ? 'yes' : 'no'}`);
+    if (imageUrl) console.log(`Image: ${imageUrl}`);
+    if (link) console.log(`Link:  ${link} (${ctaLabel})`);
 
     if (dryRun) {
       if (sendEmail) {
@@ -201,6 +238,8 @@ async function main(): Promise<void> {
               to: user.email,
               title,
               body,
+              imageUrl,
+              cta: link ? { label: ctaLabel, href: link } : undefined,
             });
             emailed += 1;
           } catch (err) {

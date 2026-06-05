@@ -4,11 +4,13 @@ import { StreaksController } from './streaks.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Streak } from '../entities/streak.entity';
 import { User } from 'src/entities/user.entity';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Streak]),
     TypeOrmModule.forFeature([User]),
+    MailModule,
   ],
   controllers: [StreaksController],
   providers: [StreaksService],

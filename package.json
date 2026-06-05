@@ -18,7 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "script:send-announcement": "ts-node -r tsconfig-paths/register scripts/send-announcement.ts"
+    "script:send-announcement": "ts-node -r tsconfig-paths/register scripts/send-announcement.ts",
+    "script:preview-notification-card": "ts-node -r tsconfig-paths/register scripts/preview-notification-card.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
