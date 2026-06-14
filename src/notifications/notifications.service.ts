@@ -128,7 +128,6 @@ export class NotificationsService {
     );
   }
 
-
   async onPomodoroComplete(
     userId: string,
     sessionId: string,
@@ -137,7 +136,7 @@ export class NotificationsService {
     email?: string,
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
-  
+
     if (prefs.streak_updates) {
       if ((STREAK_MILESTONES as readonly number[]).includes(currentStreak)) {
         const milestone = streakMilestoneCopy(currentStreak);
@@ -146,15 +145,24 @@ export class NotificationsService {
           type: 'streak_milestone',
           title: milestone.title,
           body: milestone.body,
-          dedupeKey: dedupeKey('streak_milestone', userId, String(currentStreak)),
+          dedupeKey: dedupeKey(
+            'streak_milestone',
+            userId,
+            String(currentStreak),
+          ),
         });
         if (milestoneCreated && email) {
-          await this.sendNudgeEmail(email, milestone.title, milestone.body, IMAGES.yay);
+          await this.sendNudgeEmail(
+            email,
+            milestone.title,
+            milestone.body,
+            IMAGES.yay,
+          );
         }
       }
     }
   }
-  
+
   async notifyStreakAtRisk(
     userId: string,
     currentStreak: number,
@@ -164,7 +172,7 @@ export class NotificationsService {
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.streak_nudges) return;
-  
+
     const copy = streakAtRiskCopy(currentStreak, isLastChance);
     // different dedupe key so both 9PM and 11PM can fire
     const suffix = isLastChance ? `${today}:last` : `${today}:early`;
@@ -175,7 +183,7 @@ export class NotificationsService {
       body: copy.body,
       dedupeKey: dedupeKey('streak_at_risk', userId, suffix),
     });
-  
+
     if (created && email) {
       await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.mad);
     }

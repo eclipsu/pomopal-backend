@@ -89,15 +89,13 @@ export class SessionsService {
     const saved = await this.sessionRepo.save(session);
 
     if (session.type === SessionType.POMODORO) {
-      if (delta > 0) {
         await this.dailyStatsService.applyMinutes(
           session.user.id,
           session.started_at,
           normalizeTimezone(session.user.time_zone),
-          delta,
+          Math.max(delta, 0),
           1,
         );
-      }
 
       try {
         const streak = await this.streakService.getRecord(session.user.id);
