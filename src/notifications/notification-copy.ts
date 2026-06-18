@@ -9,10 +9,11 @@ export const APP_LINK = 'https://pomopal.lol';
 export function streakAtRiskCopy(
   streak: number,
   isLastChance = false,
-): { title: string } {
+): { title: string; body: string } {
   if (isLastChance) {
     return {
-      title: pick([
+      title: 'Streak is at Risk',
+      body: pick([
         `BROOOOOOOO! It's 11 PM. Your ${streak}-day streak is not doing okay.`,
         `Your ${streak} day streak is dying, it will haunt you forever btw`,
         `Your ${streak} day streak just called me. It's sad because you abandoned it.`,
@@ -22,7 +23,8 @@ export function streakAtRiskCopy(
   }
 
   return {
-    title: pick([
+    title: 'Streak is at Risk',
+    body: pick([
       `${streak} day streak dying, it will haunt you forever btw`,
       `Who's going to carry the books and the ${streak} day streak, son?`,
       `Tell yourself the truth! That you've wasted enough time... so your ${streak} day streak doesn't die, ok?`,
@@ -31,9 +33,10 @@ export function streakAtRiskCopy(
   };
 }
 
-export function streakMilestoneCopy(streak: number): { title: string } {
+export function streakMilestoneCopy(streak: number): { title: string; body: string } {
   return {
-    title: pick([
+    title: 'Streak Milestone',
+    body: pick([
       `${streak} days. Nobody is going to say it so I will: you're built different.`,
       `${streak} days in a row. Name one person in your life who would do that. I'll wait.`,
       `${streak} days and you're still here. I'm not crying, you're crying.`,
@@ -42,9 +45,10 @@ export function streakMilestoneCopy(streak: number): { title: string } {
   };
 }
 
-export function dailyNudgeCopy(): { title: string } {
+export function dailyNudgeCopy(): { title: string; body: string } {
   return {
-    title: pick([
+    title: 'Daily Nudge',
+    body: pick([
       `YEAH BUDDY, KEEP SCROLLING 😂.`,
       `Stay hard. Or don't. But mostly stay hard. 👃`,
       `Your future self has a six pack and a ${APP_LINK} streak. Just saying.`,
@@ -53,9 +57,10 @@ export function dailyNudgeCopy(): { title: string } {
   };
 }
 
-export function comebackCopy(daysAway: number): { title: string } {
+export function comebackCopy(daysAway: number): { title: string; body: string } {
   return {
-    title: pick([
+    title: 'Comeback',
+    body: pick([
       `PLEASE COMEBACKKK 😭😭😭`,
       `You ghosted PomoPal for ${daysAway} days... please come back.`,
       `Psst- hey! Come back, I'll buy you a beer if you do.`,
@@ -63,9 +68,10 @@ export function comebackCopy(daysAway: number): { title: string } {
   };
 }
 
-export function focusCompleteCopy(): { title: string } {
+export function focusCompleteCopy(): { title: string; body: string } {
   return {
-    title: pick([
+    title: 'Focus Complete',
+    body: pick([
       `W. That's it. Just W. 🫠`,
       `You did a pomodoro and didn't die. Growth. 💪`,
       `Entire session of not being a coward. Respect. 👍`,

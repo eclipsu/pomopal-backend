@@ -21,20 +21,24 @@ describe('notification-copy', () => {
 
   it('includes streak count in at-risk copy', () => {
     const { title, body } = streakAtRiskCopy(12);
-    expect(title).toContain('12');
+    expect(title).toBe('Streak is at Risk');
+    expect(body).toContain('12');
     expect(body.length).toBeGreaterThan(10);
   });
 
   it('includes streak count in milestone copy', () => {
-    const { title } = streakMilestoneCopy(7);
-    expect(title).toContain('7');
+    const { title, body } = streakMilestoneCopy(7);
+    expect(title).toBe('Streak Milestone');
+    expect(body).toContain('7');
   });
 
   it('returns non-empty nudge and comeback messages', () => {
-    expect(dailyNudgeCopy().title).toBeTruthy();
+    expect(dailyNudgeCopy().title).toBe('Daily Nudge');
+    expect(dailyNudgeCopy().body).toBeTruthy();
     const comeback = comebackCopy(4);
-    expect(comeback.title).toBeTruthy();
+    expect(comeback.title).toBe('Comeback');
     expect(comeback.body.length).toBeGreaterThan(10);
-    expect(focusCompleteCopy().title).toBeTruthy();
+    expect(focusCompleteCopy().title).toBe('Focus Complete');
+    expect(focusCompleteCopy().body).toBeTruthy();
   });
 });
