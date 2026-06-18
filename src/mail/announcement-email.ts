@@ -18,7 +18,7 @@ export interface AnnouncementSmtpConfig {
 export interface SendAnnouncementOptions {
   to: string;
   title: string;
-  body: string;
+  body: string | null;
   imageUrl?: string;
   imageAlt?: string;
   cta?: NotificationCardCta;
@@ -41,7 +41,7 @@ export async function sendAnnouncementEmail(
 
   const card = {
     title: opts.title,
-    body: opts.body,
+    body: opts.body ?? '',
     imageUrl: opts.imageUrl,
     imageAlt: opts.imageAlt,
     cta: opts.cta,
