@@ -22,6 +22,7 @@ interface CreateParams {
   userId: string;
   type: NotificationType;
   title: string;
+  body: string;
   dedupeKey: string;
 }
 
@@ -83,6 +84,7 @@ export class NotificationsService {
           user_id: params.userId,
           type: params.type,
           title: params.title,
+          body: params.body,
           dedupe_key: params.dedupeKey,
           read_at: null,
         }),
@@ -142,6 +144,7 @@ export class NotificationsService {
           userId,
           type: 'streak_milestone',
           title: milestone.title,
+          body: milestone.body,
           dedupeKey: dedupeKey(
             'streak_milestone',
             userId,
@@ -152,6 +155,7 @@ export class NotificationsService {
           await this.sendNudgeEmail(
             email,
             milestone.title,
+            milestone.body,
             IMAGES.yay,
           );
         }
@@ -176,11 +180,12 @@ export class NotificationsService {
       userId,
       type: 'streak_at_risk',
       title: copy.title,
+      body: copy.body,
       dedupeKey: dedupeKey('streak_at_risk', userId, suffix),
     });
 
     if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, IMAGES.mad);
+      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.mad);
     }
   }
   async notifyDailyNudge(
@@ -196,11 +201,12 @@ export class NotificationsService {
       userId,
       type: 'daily_nudge',
       title: copy.title,
+      body: copy.body,
       dedupeKey: dedupeKey('daily_nudge', userId, today),
     });
 
     if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, IMAGES.sad);
+      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.sad);
     }
   }
 
@@ -217,11 +223,12 @@ export class NotificationsService {
       userId,
       type: 'comeback',
       title: copy.title,
+      body: copy.body,
       dedupeKey: dedupeKey('comeback', userId, `${daysAway}d`),
     });
 
     if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, IMAGES.sad);
+      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.sad);
     }
   }
 
@@ -233,6 +240,7 @@ export class NotificationsService {
   private async sendNudgeEmail(
     to: string,
     title: string,
+    body: string,
     imageUrl?: string,
   ): Promise<void> {
     if (!this.mailService.isConfigured()) {
@@ -240,7 +248,7 @@ export class NotificationsService {
       return;
     }
     try {
-      await this.mailService.sendAnnouncement({ to, title, body: null, imageUrl });
+      await this.mailService.sendAnnouncement({ to, title, body, imageUrl });
     } catch (err) {
       this.logger.error(
         `Failed to email ${to}: ${title}`,

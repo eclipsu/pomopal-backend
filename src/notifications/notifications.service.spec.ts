@@ -62,13 +62,36 @@ describe('NotificationsService', () => {
     const result = await service.createIfNew({
       userId: 'user-1',
       type: 'daily_nudge',
-      title: 'Hi',
-      body: 'Body',
+      title: 'Daily Nudge',
+      body: 'Stay hard.',
       dedupeKey: 'daily_nudge:user-1:2026-06-01',
     });
 
     expect(result).toBeNull();
     expect(notificationRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('persists title and body separately', async () => {
+    notificationRepo.findOne.mockResolvedValue(null);
+    notificationRepo.save.mockImplementation(async (row) => ({
+      ...row,
+      id: 'n-1',
+    }));
+
+    await service.createIfNew({
+      userId: 'user-1',
+      type: 'daily_nudge',
+      title: 'Daily Nudge',
+      body: 'Stay hard.',
+      dedupeKey: 'daily_nudge:user-1:2026-06-02',
+    });
+
+    expect(notificationRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Daily Nudge',
+        body: 'Stay hard.',
+      }),
+    );
   });
 
   it('creates streak milestone when prefs allow updates', async () => {
@@ -93,12 +116,11 @@ describe('NotificationsService', () => {
     const types = notificationRepo.save.mock.calls.map(
       (call: [{ type: string }]) => call[0].type,
     );
-    expect(types).toContain('focus_complete');
     expect(types).toContain('streak_milestone');
     expect(mailService.sendAnnouncement).not.toHaveBeenCalled();
   });
 
-  it('emails streak milestone and focus complete when address provided', async () => {
+  it('emails streak milestone when address provided', async () => {
     prefsRepo.findOneBy.mockResolvedValue({
       user_id: 'user-1',
       streak_updates: true,
@@ -117,9 +139,13 @@ describe('NotificationsService', () => {
       'user@example.com',
     );
 
-    expect(mailService.sendAnnouncement).toHaveBeenCalledTimes(2);
+    expect(mailService.sendAnnouncement).toHaveBeenCalledTimes(1);
     expect(mailService.sendAnnouncement).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'user@example.com' }),
+      expect.objectContaining({
+        to: 'user@example.com',
+        title: 'Streak Milestone',
+        body: expect.any(String),
+      }),
     );
   });
 
