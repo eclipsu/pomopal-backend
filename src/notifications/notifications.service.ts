@@ -17,6 +17,8 @@ import {
   streakMilestoneCopy,
 } from './notification-copy';
 import { MailService } from '../mail/mail.service';
+import { TemplatePickerService } from './template-picker.service';
+import { renderTemplate } from './template-render';
 
 interface CreateParams {
   userId: string;
@@ -51,6 +53,7 @@ export class NotificationsService {
     @InjectRepository(NotificationPreferences)
     private readonly prefsRepo: Repository<NotificationPreferences>,
     private readonly mailService: MailService,
+    private readonly templatePicker: TemplatePickerService,
   ) {}
 
   async ensurePreferences(userId: string): Promise<NotificationPreferences> {
@@ -139,26 +142,19 @@ export class NotificationsService {
 
     if (prefs.streak_updates) {
       if ((STREAK_MILESTONES as readonly number[]).includes(currentStreak)) {
-        const milestone = streakMilestoneCopy(currentStreak);
-        const milestoneCreated = await this.createIfNew({
+        await this.notifyWithTemplate({
           userId,
           type: 'streak_milestone',
-          title: milestone.title,
-          body: milestone.body,
+          context: { streak: currentStreak },
           dedupeKey: dedupeKey(
             'streak_milestone',
             userId,
             String(currentStreak),
           ),
+          fallback: () => streakMilestoneCopy(currentStreak),
+          fallbackImage: IMAGES.yay,
+          email,
         });
-        if (milestoneCreated && email) {
-          await this.sendNudgeEmail(
-            email,
-            milestone.title,
-            milestone.body,
-            IMAGES.yay,
-          );
-        }
       }
     }
   }
@@ -169,72 +165,122 @@ export class NotificationsService {
     today: string,
     email?: string,
     isLastChance = false,
+    extraContext: Record<string, unknown> = {},
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.streak_nudges) return;
 
-    const copy = streakAtRiskCopy(currentStreak, isLastChance);
-    // different dedupe key so both 9PM and 11PM can fire
     const suffix = isLastChance ? `${today}:last` : `${today}:early`;
-    const created = await this.createIfNew({
+    await this.notifyWithTemplate({
       userId,
       type: 'streak_at_risk',
-      title: copy.title,
-      body: copy.body,
+      context: {
+        streak: currentStreak,
+        isLastChance,
+        today,
+        ...extraContext,
+      },
       dedupeKey: dedupeKey('streak_at_risk', userId, suffix),
+      fallback: () => streakAtRiskCopy(currentStreak, isLastChance),
+      fallbackImage: IMAGES.mad,
+      email,
     });
-
-    if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.mad);
-    }
   }
   async notifyDailyNudge(
     userId: string,
     today: string,
     email?: string,
+    extraContext: Record<string, unknown> = {},
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.streak_nudges) return;
 
-    const copy = dailyNudgeCopy();
-    const created = await this.createIfNew({
+    await this.notifyWithTemplate({
       userId,
       type: 'daily_nudge',
-      title: copy.title,
-      body: copy.body,
+      context: { today, ...extraContext },
       dedupeKey: dedupeKey('daily_nudge', userId, today),
+      fallback: () => dailyNudgeCopy(),
+      fallbackImage: IMAGES.sad,
+      email,
     });
-
-    if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.sad);
-    }
   }
 
   async notifyComeback(
     userId: string,
     daysAway: number,
     email?: string,
+    extraContext: Record<string, unknown> = {},
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.inactive_reminders) return;
 
-    const copy = comebackCopy(daysAway);
-    const created = await this.createIfNew({
+    await this.notifyWithTemplate({
       userId,
       type: 'comeback',
-      title: copy.title,
-      body: copy.body,
+      context: { daysAway, ...extraContext },
       dedupeKey: dedupeKey('comeback', userId, `${daysAway}d`),
+      fallback: () => comebackCopy(daysAway),
+      fallbackImage: IMAGES.sad,
+      email,
     });
-
-    if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.sad);
-    }
   }
 
   async userAllowsAnnouncements(userId: string): Promise<boolean> {
     const prefs = await this.ensurePreferences(userId);
     return prefs.product_announcements;
+  }
+
+  private async notifyWithTemplate(params: {
+    userId: string;
+    type: NotificationType;
+    context: Record<string, unknown>;
+    dedupeKey: string;
+    fallback: () => { title: string; body: string };
+    fallbackImage: string;
+    email?: string;
+  }): Promise<Notification | null> {
+    let title: string;
+    let body: string;
+    let imageUrl = params.fallbackImage;
+
+    const templatesConfigured = await this.templatePicker.hasActiveTemplates(
+      params.type,
+    );
+
+    const template = await this.templatePicker.pickTemplate(
+      params.type,
+      params.context,
+    );
+
+    if (template) {
+      title = renderTemplate(template.title, params.context);
+      body = renderTemplate(template.body, params.context);
+      imageUrl = template.image_url ?? params.fallbackImage;
+    } else if (templatesConfigured) {
+      this.logger.debug(
+        `Skipped ${params.type} for ${params.userId}: no eligible template`,
+      );
+      return null;
+    } else {
+      const copy = params.fallback();
+      title = copy.title;
+      body = copy.body;
+    }
+
+    const created = await this.createIfNew({
+      userId: params.userId,
+      type: params.type,
+      title,
+      body,
+      dedupeKey: params.dedupeKey,
+    });
+
+    if (created && params.email) {
+      await this.sendNudgeEmail(params.email, title, body, imageUrl);
+    }
+
+    return created;
   }
 
   private async sendNudgeEmail(

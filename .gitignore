@@ -42,6 +42,10 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# Uploaded template images
+/storage/templates/*
+!/storage/templates/.gitkeep
+
 # temp directory
 .temp
 .tmp

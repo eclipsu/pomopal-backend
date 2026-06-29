@@ -109,6 +109,7 @@ export class NotificationScheduler {
       today,
       email,
       isLastChance,
+      { today },
     );
   }
   private async maybeDailyNudge(
@@ -139,7 +140,11 @@ export class NotificationScheduler {
       : null;
     if (lastActive === today) return;
 
-    await this.notifications.notifyDailyNudge(userId, today, email);
+    await this.notifications.notifyDailyNudge(userId, today, email, {
+      streak: streak?.current_streak ?? 0,
+      completedSessions: completedCount,
+      today,
+    });
   }
   private async maybeComeback(
     userId: string,
@@ -170,7 +175,7 @@ export class NotificationScheduler {
     });
     if (stat && stat.session_count > 0) return;
 
-    await this.notifications.notifyComeback(userId, daysAway, email);
+    await this.notifications.notifyComeback(userId, daysAway, email, { today });
   }
   private async preferredFocusHour(
     userId: string,

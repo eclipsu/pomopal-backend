@@ -1,3 +1,6 @@
+import type { UserRole } from 'src/entities/user.entity';
+
 export type AuthJwtPayload = {
-  sub: number;
+  sub: string;
+  role: UserRole;
 };

@@ -4,6 +4,7 @@ import { NotificationsService } from './notifications.service';
 import { Notification } from '../entities/notification.entity';
 import { NotificationPreferences } from '../entities/notification-preferences.entity';
 import { MailService } from '../mail/mail.service';
+import { TemplatePickerService } from './template-picker.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -28,6 +29,11 @@ describe('NotificationsService', () => {
     isConfigured: jest.fn().mockReturnValue(true),
   };
 
+  const templatePicker = {
+    pickTemplate: jest.fn().mockResolvedValue(null),
+    hasActiveTemplates: jest.fn().mockResolvedValue(false),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -40,6 +46,7 @@ describe('NotificationsService', () => {
           useValue: prefsRepo,
         },
         { provide: MailService, useValue: mailService },
+        { provide: TemplatePickerService, useValue: templatePicker },
       ],
     }).compile();
 

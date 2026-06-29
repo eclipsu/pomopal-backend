@@ -14,6 +14,8 @@ import { Streak } from './streak.entity';
 import { Friendship } from './friendship.entity';
 import { UserPrivacy } from './user-privacy.entity';
 
+export type UserRole = 'user' | 'admin';
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -42,6 +44,9 @@ export class User {
 
   @Column({ default: 'America/Chicago' })
   time_zone!: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'user' })
+  role!: UserRole;
 
   /** Cached sum of focus minutes; backfilled from daily_stats when null. */
   @Column({ type: 'int', nullable: true })

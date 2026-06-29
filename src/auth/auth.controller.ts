@@ -50,8 +50,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(AuthGuard('local'))
   @Post('login')
-  login(@Request() req, @Res({ passthrough: true }) res: Response) {
-    const { id, token, refreshToken } = this.authService.login(req.user.id);
+  async login(@Request() req, @Res({ passthrough: true }) res: Response) {
+    const { id, token, refreshToken } = await this.authService.login(req.user.id);
     this.setTokenCookies(res, token, refreshToken);
     return { id };
   }
@@ -90,8 +90,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(RefreshAuthGuard)
   @Post('refresh')
-  refreshToken(@Req() req, @Res({ passthrough: true }) res: Response) {
-    const { id, token } = this.authService.refreshToken(req.user.id);
+  async refreshToken(@Req() req, @Res({ passthrough: true }) res: Response) {
+    const { id, token } = await this.authService.refreshToken(req.user.id);
     this.setTokenCookies(res, token);
     return { id };
   }
@@ -106,9 +106,19 @@ export class AuthController {
     const { token, refreshToken } = await this.authService.login(req.user.id);
     this.setTokenCookies(res, token, refreshToken);
     res.clearCookie('oauth_timezone', { path: '/' });
+
+    const returnTo = req.cookies?.oauth_return_to as string | undefined;
+    res.clearCookie('oauth_return_to', { path: '/' });
+
+    const frontend =
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const successUrl = frontend.endsWith('/success')
+      ? frontend
+      : `${frontend.replace(/\/$/, '')}/success`;
     const redirectTo =
-      this.configService.get<string>('FRONTEND_URL') ||
-      'http://localhost:3000/success';
+      returnTo && returnTo.startsWith('/')
+        ? `${successUrl}?returnTo=${encodeURIComponent(returnTo)}`
+        : successUrl;
     res.redirect(redirectTo);
   }
 }
