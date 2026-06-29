@@ -6,7 +6,6 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
-import { join } from 'path';
 import { getCorsOriginConfig } from './config/cors.config';
 import { SocketIoAdapter } from './socket-io.adapter';
 
@@ -35,8 +34,6 @@ async function bootstrap() {
   });
 
   app.use(cookieParser());
-
-  app.useStaticAssets(join(process.cwd(), 'storage'), { prefix: '/storage' });
 
   app.useGlobalPipes(
     new ValidationPipe({

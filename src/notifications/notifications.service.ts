@@ -19,6 +19,7 @@ import {
 import { MailService } from '../mail/mail.service';
 import { TemplatePickerService } from './template-picker.service';
 import { renderTemplate } from './template-render';
+import { StorageService } from '../storage/storage.service';
 
 interface CreateParams {
   userId: string;
@@ -54,6 +55,7 @@ export class NotificationsService {
     private readonly prefsRepo: Repository<NotificationPreferences>,
     private readonly mailService: MailService,
     private readonly templatePicker: TemplatePickerService,
+    private readonly storage: StorageService,
   ) {}
 
   async ensurePreferences(userId: string): Promise<NotificationPreferences> {
@@ -231,6 +233,120 @@ export class NotificationsService {
     return prefs.product_announcements;
   }
 
+  async sendTestNotification(params: {
+    userId: string;
+    email: string;
+    type: NotificationType;
+    templateId?: string;
+    sendEmail?: boolean;
+    context: Record<string, unknown>;
+  }) {
+    let title: string;
+    let body: string;
+    let imageUrl = this.fallbackImageForType(params.type);
+    let source: 'template' | 'fallback' = 'fallback';
+    let templateName: string | null = null;
+
+    if (params.templateId) {
+      const template = await this.templatePicker.findById(params.templateId);
+      if (!template) throw new NotFoundException('Template not found');
+      title = renderTemplate(template.title, params.context);
+      body = renderTemplate(template.body, params.context);
+      imageUrl = template.image_url ?? imageUrl;
+      source = 'template';
+      templateName = template.name;
+    } else {
+      const templatesConfigured = await this.templatePicker.hasActiveTemplates(
+        params.type,
+      );
+      const template = await this.templatePicker.pickTemplate(
+        params.type,
+        params.context,
+      );
+      if (template) {
+        title = renderTemplate(template.title, params.context);
+        body = renderTemplate(template.body, params.context);
+        imageUrl = template.image_url ?? imageUrl;
+        source = 'template';
+        templateName = template.name;
+      } else if (templatesConfigured) {
+        throw new NotFoundException(
+          'No eligible template for this type and context',
+        );
+      } else {
+        const copy = this.fallbackCopyForType(params.type, params.context);
+        title = copy.title;
+        body = copy.body;
+      }
+    }
+
+    const dedupeKey = `test:${params.type}:${params.userId}:${Date.now()}`;
+    const notification = await this.notificationRepo.save(
+      this.notificationRepo.create({
+        user_id: params.userId,
+        type: params.type,
+        title,
+        body,
+        dedupe_key: dedupeKey,
+        read_at: null,
+      }),
+    );
+
+    let emailSent = false;
+    if (params.sendEmail !== false) {
+      const signedImage = await this.resolveEmailImage(imageUrl);
+      await this.sendNudgeEmail(params.email, title, body, signedImage);
+      emailSent = this.mailService.isConfigured();
+    }
+
+    return {
+      notification,
+      title,
+      body,
+      source,
+      templateName,
+      emailSent,
+    };
+  }
+
+  private fallbackImageForType(type: NotificationType): string {
+    switch (type) {
+      case 'streak_at_risk':
+        return IMAGES.mad;
+      case 'streak_milestone':
+        return IMAGES.yay;
+      case 'daily_nudge':
+      case 'comeback':
+        return IMAGES.sad;
+      default:
+        return IMAGES.super;
+    }
+  }
+
+  private fallbackCopyForType(
+    type: NotificationType,
+    context: Record<string, unknown>,
+  ): { title: string; body: string } {
+    const streak = Number(context.streak ?? 7);
+    const daysAway = Number(context.daysAway ?? 5);
+    const isLastChance = Boolean(context.isLastChance);
+
+    switch (type) {
+      case 'streak_at_risk':
+        return streakAtRiskCopy(streak, isLastChance);
+      case 'streak_milestone':
+        return streakMilestoneCopy(streak);
+      case 'daily_nudge':
+        return dailyNudgeCopy();
+      case 'comeback':
+        return comebackCopy(daysAway);
+      case 'focus_complete':
+        return focusCompleteCopy();
+      default:
+        return { title: 'Test notification', body: 'This is a test from admin.' };
+    }
+  }
+
   private async notifyWithTemplate(params: {
     userId: string;
     type: NotificationType;
@@ -277,10 +393,19 @@ export class NotificationsService {
     });
 
     if (created && params.email) {
-      await this.sendNudgeEmail(params.email, title, body, imageUrl);
+      const signedImage = await this.resolveEmailImage(imageUrl);
+      await this.sendNudgeEmail(params.email, title, body, signedImage);
     }
 
     return created;
+  }
+
+  private async resolveEmailImage(
+    url: string | undefined,
+  ): Promise<string | undefined> {
+    if (!url) return undefined;
+    const resolved = await this.storage.resolveImageUrl(url);
+    return resolved ?? url;
   }
 
   private async sendNudgeEmail(

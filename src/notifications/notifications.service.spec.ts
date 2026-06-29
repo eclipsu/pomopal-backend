@@ -5,6 +5,7 @@ import { Notification } from '../entities/notification.entity';
 import { NotificationPreferences } from '../entities/notification-preferences.entity';
 import { MailService } from '../mail/mail.service';
 import { TemplatePickerService } from './template-picker.service';
+import { StorageService } from '../storage/storage.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -34,6 +35,10 @@ describe('NotificationsService', () => {
     hasActiveTemplates: jest.fn().mockResolvedValue(false),
   };
 
+  const storage = {
+    resolveImageUrl: jest.fn().mockImplementation(async (url: string) => url),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -47,6 +52,7 @@ describe('NotificationsService', () => {
         },
         { provide: MailService, useValue: mailService },
         { provide: TemplatePickerService, useValue: templatePicker },
+        { provide: StorageService, useValue: storage },
       ],
     }).compile();
 

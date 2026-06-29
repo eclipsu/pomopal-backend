@@ -18,13 +18,21 @@ export class AdminNotificationTemplatesService {
   ) {}
 
   findAll() {
-    return this.templates.find({ order: { updated_at: 'DESC' } });
+    return this.templates
+      .find({ order: { updated_at: 'DESC' } })
+      .then((rows) => Promise.all(rows.map((t) => this.withSignedImage(t))));
   }
 
   async findOne(id: string) {
     const template = await this.templates.findOne({ where: { id } });
     if (!template) throw new NotFoundException('Template not found');
-    return template;
+    return this.withSignedImage(template);
+  }
+
+  private async withSignedImage(template: NotificationTemplate) {
+    if (!template.image_url) return template;
+    const signed = await this.storage.resolveImageUrl(template.image_url);
+    return { ...template, image_url: signed };
   }
 
   async create(
@@ -48,7 +56,7 @@ export class AdminNotificationTemplatesService {
       image_url,
     });
 
-    return this.templates.save(template);
+    return this.withSignedImage(await this.templates.save(template));
   }
 
   async update(
@@ -56,10 +64,11 @@ export class AdminNotificationTemplatesService {
     dto: UpdateNotificationTemplateDto,
     image?: Express.Multer.File,
   ) {
-    const template = await this.findOne(id);
+    const template = await this.templates.findOne({ where: { id } });
+    if (!template) throw new NotFoundException('Template not found');
 
     if (image) {
-      await this.storage.deleteByUrl(template.image_url);
+      await this.storage.deleteStoredImage(template.image_url);
       template.image_url = await this.storage.saveTemplateImage(image, id);
     }
 
@@ -74,12 +83,13 @@ export class AdminNotificationTemplatesService {
       ...(dto.active !== undefined && { active: dto.active }),
     });
 
-    return this.templates.save(template);
+    return this.withSignedImage(await this.templates.save(template));
   }
 
   async remove(id: string) {
-    const template = await this.findOne(id);
-    await this.storage.deleteByUrl(template.image_url);
+    const template = await this.templates.findOne({ where: { id } });
+    if (!template) throw new NotFoundException('Template not found');
+    await this.storage.deleteStoredImage(template.image_url);
     await this.templates.remove(template);
     return { deleted: true };
   }

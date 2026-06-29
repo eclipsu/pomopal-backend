@@ -28,4 +28,8 @@ export class TemplatePickerService {
     if (!eligible.length) return null;
     return eligible[Math.floor(Math.random() * eligible.length)];
   }
+
+  async findById(id: string): Promise<NotificationTemplate | null> {
+    return this.templates.findOne({ where: { id } });
+  }
 }
