@@ -4,6 +4,13 @@ import {
   buildNotificationCardText,
   NotificationCardCta,
 } from './notification-card-email';
+import {
+  fetchUrlAsInlineImage,
+  InlineEmailImage,
+  NOTIFICATION_IMAGE_CID,
+} from './email-inline-image';
+
+export type { InlineEmailImage } from './email-inline-image';
 
 export interface AnnouncementSmtpConfig {
   host: string;
@@ -21,6 +28,7 @@ export interface SendAnnouncementOptions {
   body: string | null;
   imageUrl?: string;
   imageAlt?: string;
+  inlineImage?: InlineEmailImage;
   cta?: NotificationCardCta;
   preheader?: string;
 }
@@ -39,14 +47,34 @@ export async function sendAnnouncementEmail(
     },
   });
 
+  let inlineImage = opts.inlineImage;
+  let imageUrl = opts.imageUrl;
+
+  if (!inlineImage && imageUrl?.startsWith('http')) {
+    inlineImage = (await fetchUrlAsInlineImage(imageUrl)) ?? undefined;
+    if (inlineImage) imageUrl = undefined;
+  }
+
   const card = {
     title: opts.title,
     body: opts.body ?? '',
-    imageUrl: opts.imageUrl,
+    imageUrl: inlineImage ? `cid:${NOTIFICATION_IMAGE_CID}` : imageUrl,
     imageAlt: opts.imageAlt,
     cta: opts.cta,
     preheader: opts.preheader,
   };
+
+  const attachments = inlineImage
+    ? [
+        {
+          filename: inlineImage.filename,
+          content: inlineImage.content,
+          cid: inlineImage.cid,
+          contentType: inlineImage.contentType,
+          contentDisposition: 'inline' as const,
+        },
+      ]
+    : undefined;
 
   await transporter.sendMail({
     from: `"${smtp.fromName}" <${smtp.from}>`,
@@ -54,5 +82,6 @@ export async function sendAnnouncementEmail(
     subject: opts.title,
     html: buildNotificationCardHtml(card),
     text: buildNotificationCardText(card),
+    attachments,
   });
 }

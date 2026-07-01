@@ -37,6 +37,7 @@ describe('NotificationsService', () => {
 
   const storage = {
     resolveImageUrl: jest.fn().mockImplementation(async (url: string) => url),
+    getObjectBuffer: jest.fn().mockResolvedValue(null),
   };
 
   beforeEach(async () => {
@@ -158,6 +159,40 @@ describe('NotificationsService', () => {
         to: 'user@example.com',
         title: 'Streak Milestone',
         body: expect.any(String),
+        imageAlt: 'Streak Milestone',
+      }),
+    );
+  });
+
+  it('embeds template images inline when storage returns bytes', async () => {
+    prefsRepo.findOneBy.mockResolvedValue({
+      user_id: 'user-1',
+      streak_nudges: true,
+    });
+    notificationRepo.findOne.mockResolvedValue(null);
+    notificationRepo.save.mockImplementation(async (row) => ({
+      ...row,
+      id: 'n-1',
+    }));
+    templatePicker.hasActiveTemplates.mockResolvedValue(true);
+    templatePicker.pickTemplate.mockResolvedValue({
+      title: 'Hi {{streak}}',
+      body: 'Body',
+      image_url: 'notification-templates/test.webp',
+    });
+    storage.getObjectBuffer.mockResolvedValue({
+      buffer: Buffer.from('img'),
+      contentType: 'image/webp',
+    });
+
+    await service.notifyStreakAtRisk('user-1', 5, '2026-06-01', 'user@example.com');
+
+    expect(mailService.sendAnnouncement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inlineImage: expect.objectContaining({
+          cid: 'pomopal-notification-image',
+          content: Buffer.from('img'),
+        }),
       }),
     );
   });

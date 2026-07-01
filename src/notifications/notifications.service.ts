@@ -20,6 +20,7 @@ import { MailService } from '../mail/mail.service';
 import { TemplatePickerService } from './template-picker.service';
 import { renderTemplate } from './template-render';
 import { StorageService } from '../storage/storage.service';
+import { resolveInlineEmailImage } from '../mail/email-inline-image';
 
 interface CreateParams {
   userId: string;
@@ -294,8 +295,7 @@ export class NotificationsService {
 
     let emailSent = false;
     if (params.sendEmail !== false) {
-      const signedImage = await this.resolveEmailImage(imageUrl);
-      await this.sendNudgeEmail(params.email, title, body, signedImage);
+      await this.sendNudgeEmail(params.email, title, body, imageUrl);
       emailSent = this.mailService.isConfigured();
     }
 
@@ -393,33 +393,35 @@ export class NotificationsService {
     });
 
     if (created && params.email) {
-      const signedImage = await this.resolveEmailImage(imageUrl);
-      await this.sendNudgeEmail(params.email, title, body, signedImage);
+      await this.sendNudgeEmail(params.email, title, body, imageUrl);
     }
 
     return created;
-  }
-
-  private async resolveEmailImage(
-    url: string | undefined,
-  ): Promise<string | undefined> {
-    if (!url) return undefined;
-    const resolved = await this.storage.resolveImageUrl(url);
-    return resolved ?? url;
   }
 
   private async sendNudgeEmail(
     to: string,
     title: string,
     body: string,
-    imageUrl?: string,
+    imageSource?: string,
   ): Promise<void> {
     if (!this.mailService.isConfigured()) {
       this.logger.warn(`SMTP not configured; skipped email to ${to}`);
       return;
     }
     try {
-      await this.mailService.sendAnnouncement({ to, title, body, imageUrl });
+      const { inlineImage, imageUrl } = await resolveInlineEmailImage(
+        imageSource,
+        (stored) => this.storage.getObjectBuffer(stored),
+      );
+      await this.mailService.sendAnnouncement({
+        to,
+        title,
+        body,
+        inlineImage,
+        imageUrl,
+        imageAlt: title,
+      });
     } catch (err) {
       this.logger.error(
         `Failed to email ${to}: ${title}`,

@@ -68,6 +68,12 @@ export class CreateNotificationTemplateDto {
   @Transform(({ value }) => parseBoolean(value, true))
   @IsBoolean()
   active?: boolean;
+
+  /** Reuse an existing S3 object key instead of uploading a new file. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  image_key?: string;
 }
 
 export class UpdateNotificationTemplateDto {
@@ -98,4 +104,10 @@ export class UpdateNotificationTemplateDto {
   @Transform(({ value }) => parseBoolean(value, true))
   @IsBoolean()
   active?: boolean;
+
+  /** Set to an existing S3 key to reuse, or empty string to remove the image. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  image_key?: string;
 }

@@ -23,7 +23,7 @@ export function buildNotificationCardHtml(card: NotificationCard): string {
     ? `<tr>
         <td align="center" style="padding:0 0 32px 0;">
           <img src="${card.imageUrl}" alt="${card.imageAlt ?? ''}"
-               width="220" style="display:block;border:0;outline:none;text-decoration:none;">
+               width="220" style="display:block;border:0;outline:none;text-decoration:none;max-width:100%;height:auto;">
         </td>
       </tr>`
     : '';
