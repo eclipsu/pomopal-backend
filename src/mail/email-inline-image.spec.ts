@@ -29,6 +29,16 @@ describe('email-inline-image', () => {
     expect(payload.imageUrl).toBe('https://example.com/missing.png');
   });
 
+  it('falls back to publicUrlForKey when storage read fails', async () => {
+    const key = 'notification-templates/abc.webp';
+    const payload = await resolveInlineEmailImage(key, async () => null, {
+      publicUrlForKey: (k) => `https://bucket.s3.amazonaws.com/${k}`,
+    });
+
+    expect(payload.inlineImage).toBeUndefined();
+    expect(payload.imageUrl).toBeUndefined();
+  });
+
   it('fetchUrlAsInlineImage returns null on failed fetch', async () => {
     const result = await fetchUrlAsInlineImage('https://example.invalid/nope.png');
     expect(result).toBeNull();

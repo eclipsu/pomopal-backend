@@ -22,6 +22,11 @@ const TEMPLATE_PREFIX = 'notification-templates/';
 const TEMPLATE_KEY_PATTERN =
   /^notification-templates\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/i;
 
+function trimEnv(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return value.trim().replace(/^['"]|['"]$/g, '');
+}
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
@@ -29,20 +34,19 @@ export class StorageService {
   private readonly bucket: string;
 
   constructor() {
-    const region = process.env.BUCKET_REGION;
-    const bucket = process.env.BUCKET_NAME;
+    const region = trimEnv(process.env.BUCKET_REGION);
+    const bucket = trimEnv(process.env.BUCKET_NAME);
     if (!region || !bucket) {
       throw new Error('BUCKET_REGION and BUCKET_NAME must be set');
     }
     this.bucket = bucket;
+    const accessKeyId = trimEnv(process.env.AWS_ACCESS_KEY_ID);
+    const secretAccessKey = trimEnv(process.env.AWS_SECRET_ACCESS_KEY);
     this.client = new S3Client({
       region,
       credentials:
-        process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-          ? {
-              accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-            }
+        accessKeyId && secretAccessKey
+          ? { accessKeyId, secretAccessKey }
           : undefined,
     });
   }

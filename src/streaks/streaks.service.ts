@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Streak } from 'src/entities/streak.entity';
@@ -10,8 +10,19 @@ import {
   normalizeTimezone,
   streakDateToYmd,
 } from 'src/common/time';
-import { BadRequestException } from '@nestjs/common';
 import { MailService } from '../mail/mail.service';
+
+export type StreakReviveStatus = 'none' | 'active' | 'at_risk' | 'broken';
+
+export interface StreakReviveEligibility {
+  status: StreakReviveStatus;
+  eligible: boolean;
+  reason: string;
+  current_streak: number;
+  displayed_streak: number;
+  longest_streak: number;
+  last_active_date: string | null;
+}
 
 @Injectable()
 export class StreaksService {
@@ -63,7 +74,6 @@ export class StreaksService {
       relations: ['user'],
     });
 
-    // return streak;
     if (!streak || !streak.last_active_date)
       return { current_streak: 0, longest_streak: 0 };
 
@@ -85,45 +95,115 @@ export class StreaksService {
     return { current_streak: 0, longest_streak: streak.longest_streak };
   }
 
-  async restoreStreak(email: string): Promise<{ restored: boolean; current_streak: number }> {
-    console.log('email', email);
-    const user = await this.userRepo.findOne({ where: { email } });
-    if (!user) throw new BadRequestException('User not found');
-  
+  async getReviveEligibility(userId: string): Promise<StreakReviveEligibility> {
     const streak = await this.streakRepo.findOne({
-      where: { user: { id: user.id } },
+      where: { user: { id: userId } },
       relations: ['user'],
     });
-    if (!streak) throw new BadRequestException('No streak found');
-  
-    const tz = normalizeTimezone(user.time_zone);
+
+    if (!streak || !streak.last_active_date) {
+      return {
+        status: 'none',
+        eligible: false,
+        reason: 'No streak record for this user',
+        current_streak: 0,
+        displayed_streak: 0,
+        longest_streak: streak?.longest_streak ?? 0,
+        last_active_date: null,
+      };
+    }
+
+    const tz = normalizeTimezone(streak.user?.time_zone);
     const today = todayInTz(tz);
     const yesterday = yesterdayInTz(tz);
     const lastActive = streakDateToYmd(streak.last_active_date, tz);
-  
-    if (lastActive === today || lastActive === yesterday) {
-      throw new BadRequestException('Streak is still active, nothing to restore');
+
+    const base = {
+      current_streak: streak.current_streak,
+      longest_streak: streak.longest_streak,
+      last_active_date: lastActive,
+    };
+
+    if (lastActive === today) {
+      return {
+        ...base,
+        status: 'active',
+        eligible: false,
+        reason: 'Streak is active — user focused today',
+        displayed_streak: streak.current_streak,
+      };
     }
-  
+
+    if (lastActive === yesterday) {
+      return {
+        ...base,
+        status: 'at_risk',
+        eligible: false,
+        reason: 'Streak is still active — user has until end of day to focus',
+        displayed_streak: streak.current_streak,
+      };
+    }
+
     if (streak.current_streak === 0) {
-      throw new BadRequestException('No streak to restore');
+      return {
+        ...base,
+        status: 'broken',
+        eligible: false,
+        reason: 'No streak count to restore',
+        displayed_streak: 0,
+      };
     }
-  
+
+    return {
+      ...base,
+      status: 'broken',
+      eligible: true,
+      reason: 'Eligible — streak is broken and can be revived',
+      displayed_streak: 0,
+    };
+  }
+
+  async reviveStreak(userId: string): Promise<{
+    restored: boolean;
+    current_streak: number;
+  }> {
+    const eligibility = await this.getReviveEligibility(userId);
+    if (!eligibility.eligible) {
+      throw new BadRequestException(eligibility.reason);
+    }
+
+    const streak = await this.streakRepo.findOne({
+      where: { user: { id: userId } },
+      relations: ['user'],
+    });
+    if (!streak) throw new BadRequestException('No streak found');
+
+    const tz = normalizeTimezone(streak.user?.time_zone);
+    const yesterday = yesterdayInTz(tz);
     streak.last_active_date = yesterday;
     await this.streakRepo.save(streak);
-  
-    if (this.mailService.isConfigured()) {
-      await this.mailService.sendAnnouncement({
-        to: email,
-        title: 'Streak restored',
-        body: `Life happens, we understand that you can not always be productive. We restored your ${streak.current_streak}-day streak. 
-        We will be introducing streak restores rewards in future. Thank you so much for using Pomopal and we hope to see your streak go up again. 
-        `,
-        imageUrl: IMAGES.super,
-      }).catch(() => null);
-    }
-  
+
     return { restored: true, current_streak: streak.current_streak };
+  }
+
+  async restoreStreak(email: string): Promise<{ restored: boolean; current_streak: number }> {
+    const user = await this.userRepo.findOne({ where: { email } });
+    if (!user) throw new BadRequestException('User not found');
+
+    const result = await this.reviveStreak(user.id);
+
+    if (this.mailService.isConfigured()) {
+      await this.mailService
+        .sendAnnouncement({
+          to: email,
+          title: 'Streak restored',
+          body: `Life happens, we understand that you can not always be productive. We restored your ${result.current_streak}-day streak. We will be introducing streak restores rewards in future. Thank you so much for using Pomopal and we hope to see your streak go up again.`,
+          imageUrl: IMAGES.super,
+        })
+        .catch(() => null);
+    }
+
+    return result;
   }
 
   private shiftDate(date: string, days: number): string {

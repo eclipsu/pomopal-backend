@@ -12,12 +12,41 @@ export interface NotificationCard {
   preheader?: string;
 }
 
+export function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function buildNotificationCardText(card: NotificationCard): string {
-  return [card.title, '', card.body].join('\n');
+  return [card.title, '', stripHtml(card.body)].join('\n');
+}
+
+function isHtmlBody(body: string): boolean {
+  return /<[a-z][\s\S]*>/i.test(body);
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function bodyToHtml(body: string): string {
+  if (isHtmlBody(body)) return body;
+  return escapeHtml(body).replace(
+    /(https?:\/\/[^\s]+)/g,
+    '<a href="$1" style="color:#e53e3e;text-decoration:none;font-weight:600;">Open app →</a>',
+  );
 }
 
 export function buildNotificationCardHtml(card: NotificationCard): string {
-  const preheader = card.preheader ?? card.body.slice(0, 100);
+  const preheader = card.preheader ?? stripHtml(card.body).slice(0, 100);
 
   const imageBlock = card.imageUrl
     ? `<tr>
@@ -42,11 +71,8 @@ export function buildNotificationCardHtml(card: NotificationCard): string {
       </tr>`
     : '';
 
-  // linkify trailing URL in body
-  const bodyHtml = card.body.replace(
-    /(https?:\/\/[^\s]+)/g,
-    '<a href="$1" style="color:#e53e3e;text-decoration:none;font-weight:600;">Open app →</a>',
-  );
+  // linkify trailing URL in plain-text bodies
+  const bodyHtml = bodyToHtml(card.body);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -102,10 +128,10 @@ export function buildNotificationCardHtml(card: NotificationCard): string {
                 <!-- body -->
                 <tr>
                   <td align="center" style="padding:0 0 8px 0;">
-                    <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                    <div style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
                               font-size:16px;color:#4b5563;line-height:1.75;text-align:center;">
                       ${bodyHtml}
-                    </p>
+                    </div>
                   </td>
                 </tr>
 

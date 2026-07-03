@@ -6,24 +6,43 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotificationTemplate } from '../entities/notification-template.entity';
+import { NotificationTemplateImage } from '../entities/notification-template-image.entity';
+import type { NotificationType } from '../entities/notification.entity';
+import { User } from '../entities/user.entity';
 import { StorageService } from '../storage/storage.service';
 import {
   CreateNotificationTemplateDto,
   UpdateNotificationTemplateDto,
 } from './dto/notification-template.dto';
+import {
+  defaultNameFromKey,
+  displayNameFromFile,
+  sanitizeDisplayName,
+} from './image-library.util';
 import { randomUUID } from 'crypto';
+
+export interface LibraryImageDto {
+  key: string;
+  url: string;
+  name: string;
+}
 
 @Injectable()
 export class AdminNotificationTemplatesService {
   constructor(
     @InjectRepository(NotificationTemplate)
     private readonly templates: Repository<NotificationTemplate>,
+    @InjectRepository(NotificationTemplateImage)
+    private readonly imageLibrary: Repository<NotificationTemplateImage>,
+    @InjectRepository(User)
+    private readonly users: Repository<User>,
     private readonly storage: StorageService,
   ) {}
 
-  findAll() {
+  findAll(type?: NotificationType) {
+    const where = type ? { type } : {};
     return this.templates
-      .find({ order: { updated_at: 'DESC' } })
+      .find({ where, order: { updated_at: 'DESC' } })
       .then((rows) => Promise.all(rows.map((t) => this.withResolvedImage(t))));
   }
 
@@ -33,7 +52,19 @@ export class AdminNotificationTemplatesService {
     return this.withResolvedImage(template);
   }
 
-  async listImages(): Promise<{ key: string; url: string }[]> {
+  async listImages(): Promise<LibraryImageDto[]> {
+    const fromLibrary = await this.imageLibrary.find({
+      order: { created_at: 'DESC' },
+    });
+
+    const unnamed = fromLibrary.filter((row) => !row.display_name?.trim());
+    if (unnamed.length) {
+      for (const row of unnamed) {
+        row.display_name = defaultNameFromKey(row.key);
+      }
+      await this.imageLibrary.save(unnamed);
+    }
+
     const fromS3 = await this.storage.listS3TemplateKeys();
     const fromDb = await this.templates
       .createQueryBuilder('t')
@@ -41,18 +72,89 @@ export class AdminNotificationTemplatesService {
       .where('t.image_url IS NOT NULL')
       .getRawMany<{ image_url: string }>();
 
+    const libraryByKey = new Map(fromLibrary.map((row) => [row.key, row]));
+
     const keys = new Set<string>();
+    for (const row of fromLibrary) keys.add(row.key);
     for (const key of fromS3) keys.add(key);
     for (const row of fromDb) {
       const key = this.storage.resolveKeyForReuse(row.image_url);
       if (key) keys.add(key);
     }
 
-    const sorted = [...keys].sort((a, b) => b.localeCompare(a));
-    return sorted.map((key) => ({
+    const missingKeys = [...keys].filter((key) => !libraryByKey.has(key));
+    if (missingKeys.length) {
+      const backfilled = await this.imageLibrary.save(
+        missingKeys.map((key) =>
+          this.imageLibrary.create({
+            key,
+            display_name: defaultNameFromKey(key),
+            created_by_email: null,
+          }),
+        ),
+      );
+      for (const row of backfilled) {
+        libraryByKey.set(row.key, row);
+      }
+    }
+
+    const sorted = [...keys].sort((a, b) => {
+      const aRow = libraryByKey.get(a);
+      const bRow = libraryByKey.get(b);
+      const aTime = aRow?.created_at.getTime() ?? 0;
+      const bTime = bRow?.created_at.getTime() ?? 0;
+      if (aTime !== bTime) return bTime - aTime;
+      const aName = aRow?.display_name ?? a;
+      const bName = bRow?.display_name ?? b;
+      return aName.localeCompare(bName);
+    });
+
+    return sorted.map((key) => this.toLibraryImageDto(key, libraryByKey.get(key)));
+  }
+
+  async renameImage(key: string, name: string): Promise<LibraryImageDto> {
+    if (!this.storage.isValidTemplateImageKey(key)) {
+      throw new BadRequestException('Invalid image key');
+    }
+    if (!(await this.storage.imageExists(key))) {
+      throw new NotFoundException('Image not found in storage');
+    }
+
+    let display_name: string;
+    try {
+      display_name = sanitizeDisplayName(name);
+    } catch {
+      throw new BadRequestException('Display name is required');
+    }
+
+    let row = await this.imageLibrary.findOne({ where: { key } });
+    if (!row) {
+      row = await this.imageLibrary.save(
+        this.imageLibrary.create({
+          key,
+          display_name,
+          created_by_email: null,
+        }),
+      );
+    } else {
+      row.display_name = display_name;
+      row = await this.imageLibrary.save(row);
+    }
+
+    return this.toLibraryImageDto(key, row);
+  }
+
+  private toLibraryImageDto(
+    key: string,
+    row?: NotificationTemplateImage,
+  ): LibraryImageDto {
+    const base = this.storage.objectPublicUrl(key);
+    const v = row?.created_at.getTime();
+    return {
       key,
-      url: this.storage.objectPublicUrl(key),
-    }));
+      name: row?.display_name ?? defaultNameFromKey(key),
+      url: v ? `${base}?v=${v}` : base,
+    };
   }
 
   private async withResolvedImage(template: NotificationTemplate) {
@@ -93,25 +195,64 @@ export class AdminNotificationTemplatesService {
     }
 
     const refs = await qb.getCount();
-    if (refs === 0) {
-      await this.storage.deleteStoredImage(key);
-    }
+    if (refs > 0) return;
+
+    const inLibrary = await this.imageLibrary.exists({ where: { key } });
+    if (inLibrary) return;
+
+    await this.storage.deleteStoredImage(key);
   }
 
-  async uploadImage(file?: Express.Multer.File): Promise<{ key: string; url: string }> {
+  async uploadImage(
+    file?: Express.Multer.File,
+    adminUserId?: string,
+    requestedName?: string,
+  ): Promise<LibraryImageDto> {
     if (!file) {
       throw new BadRequestException('Image file is required');
     }
     const key = await this.storage.saveTemplateImage(file);
-    return { key, url: this.storage.objectPublicUrl(key) };
+
+    let display_name: string;
+    try {
+      display_name = requestedName?.trim()
+        ? sanitizeDisplayName(requestedName)
+        : displayNameFromFile(file);
+    } catch {
+      throw new BadRequestException('Invalid image name');
+    }
+
+    let created_by_email: string | null = null;
+    if (adminUserId) {
+      const admin = await this.users.findOne({
+        where: { id: adminUserId },
+        select: ['email'],
+      });
+      created_by_email = admin?.email ?? null;
+    }
+
+    const saved = await this.imageLibrary.save(
+      this.imageLibrary.create({ key, display_name, created_by_email }),
+    );
+
+    return this.toLibraryImageDto(key, saved);
   }
 
-  async create(dto: CreateNotificationTemplateDto) {
+  async create(dto: CreateNotificationTemplateDto, adminUserId?: string) {
     const id = randomUUID();
     let image_url: string | null = null;
 
     if (dto.image_key) {
       image_url = await this.resolveReusedImageKey(dto.image_key);
+    }
+
+    let created_by_email: string | null = null;
+    if (adminUserId) {
+      const admin = await this.users.findOne({
+        where: { id: adminUserId },
+        select: ['email'],
+      });
+      created_by_email = admin?.email ?? null;
     }
 
     const template = this.templates.create({
@@ -123,6 +264,7 @@ export class AdminNotificationTemplatesService {
       eligibility_rules: dto.eligibility_rules ?? {},
       active: dto.active ?? true,
       image_url,
+      created_by_email,
     });
 
     return this.withResolvedImage(await this.templates.save(template));

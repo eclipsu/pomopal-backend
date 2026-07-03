@@ -28,6 +28,9 @@ export class NotificationTemplate {
   @Column({ type: 'boolean', default: true })
   active!: boolean;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  created_by_email!: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at!: Date;
 

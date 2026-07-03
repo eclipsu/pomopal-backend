@@ -34,6 +34,6 @@ import { StreaksModule } from '../streaks/streaks.module';
     NotificationScheduler,
     TemplatePickerService,
   ],
-  exports: [NotificationsService],
+  exports: [NotificationsService, TemplatePickerService],
 })
 export class NotificationsModule {}

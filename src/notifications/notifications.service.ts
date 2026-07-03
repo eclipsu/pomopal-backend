@@ -309,6 +309,56 @@ export class NotificationsService {
     };
   }
 
+  async sendAdminDirectMessage(params: {
+    userId: string;
+    email: string;
+    type: NotificationType;
+    title: string;
+    body: string;
+    htmlBody?: string;
+    imageSource?: string;
+    sendEmail?: boolean;
+    dedupeKey: string;
+  }) {
+    const notification = await this.notificationRepo.save(
+      this.notificationRepo.create({
+        user_id: params.userId,
+        type: params.type,
+        title: params.title,
+        body: params.body,
+        dedupe_key: params.dedupeKey,
+        read_at: null,
+      }),
+    );
+
+    let emailSent = false;
+    if (params.sendEmail !== false) {
+      await this.sendNudgeEmail(
+        params.email,
+        params.title,
+        params.htmlBody ?? params.body,
+        params.imageSource,
+      );
+      emailSent = this.mailService.isConfigured();
+    }
+
+    return { notification, emailSent };
+  }
+
+  async sendAdminEmail(params: {
+    to: string;
+    title: string;
+    htmlBody: string;
+    imageSource?: string;
+  }): Promise<void> {
+    await this.sendNudgeEmail(
+      params.to,
+      params.title,
+      params.htmlBody,
+      params.imageSource,
+    );
+  }
+
   private fallbackImageForType(type: NotificationType): string {
     switch (type) {
       case 'streak_at_risk':
@@ -413,6 +463,7 @@ export class NotificationsService {
       const { inlineImage, imageUrl } = await resolveInlineEmailImage(
         imageSource,
         (stored) => this.storage.getObjectBuffer(stored),
+        { publicUrlForKey: (key) => this.storage.objectPublicUrl(key) },
       );
       await this.mailService.sendAnnouncement({
         to,

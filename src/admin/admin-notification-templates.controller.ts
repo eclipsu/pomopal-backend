@@ -7,6 +7,8 @@ import {
   Param,
   Patch,
   Post,
+  Query,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -19,6 +21,9 @@ import {
   CreateNotificationTemplateDto,
   UpdateNotificationTemplateDto,
 } from './dto/notification-template.dto';
+import { RenameImageDto } from './dto/rename-image.dto';
+import type { AuthJwtPayload } from '../auth/types/auth-jwtPayload';
+import type { NotificationType } from '../entities/notification.entity';
 
 const imageUpload = FileInterceptor('image', {
   storage: memoryStorage(),
@@ -31,8 +36,8 @@ export class AdminNotificationTemplatesController {
   constructor(private readonly templates: AdminNotificationTemplatesService) {}
 
   @Get()
-  list() {
-    return this.templates.findAll();
+  list(@Query('type') type?: NotificationType) {
+    return this.templates.findAll(type);
   }
 
   @Get('images')
@@ -42,11 +47,20 @@ export class AdminNotificationTemplatesController {
 
   @Post('upload-image')
   @UseInterceptors(imageUpload)
-  uploadImage(@UploadedFile() image?: Express.Multer.File) {
+  uploadImage(
+    @UploadedFile() image?: Express.Multer.File,
+    @Body('name') name?: string,
+    @Req() req?: { user?: AuthJwtPayload },
+  ) {
     if (!image) {
       throw new BadRequestException('Image file is required');
     }
-    return this.templates.uploadImage(image);
+    return this.templates.uploadImage(image, req?.user?.sub, name);
+  }
+
+  @Patch('images/rename')
+  renameImage(@Body() dto: RenameImageDto) {
+    return this.templates.renameImage(dto.key, dto.name);
   }
 
   @Get(':id')
@@ -55,8 +69,11 @@ export class AdminNotificationTemplatesController {
   }
 
   @Post()
-  create(@Body() dto: CreateNotificationTemplateDto) {
-    return this.templates.create(dto);
+  create(
+    @Body() dto: CreateNotificationTemplateDto,
+    @Req() req: { user?: AuthJwtPayload },
+  ) {
+    return this.templates.create(dto, req.user?.sub);
   }
 
   @Patch(':id')
