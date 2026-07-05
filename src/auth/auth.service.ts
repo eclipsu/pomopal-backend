@@ -21,13 +21,16 @@ export class AuthService {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
 
+    const withRole = await this.userService.syncAdminRole(user);
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password_hash, ...result } = user;
-    return result;
+    return { ...result, role: withRole.role };
   }
 
-  login(userId: number) {
-    const payload: AuthJwtPayload = { sub: userId };
+  async login(userId: string) {
+    const user = await this.userService.findOne(userId);
+    const payload: AuthJwtPayload = { sub: userId, role: user.role ?? 'user' };
 
     const token = this.jwtService.sign(payload);
 
@@ -41,16 +44,14 @@ export class AuthService {
     return { id: userId, token, refreshToken };
   }
 
-  refreshToken(userId: number) {
-    const payload: AuthJwtPayload = { sub: userId };
-    const token = this.jwtService.sign(payload);
-
-    return { id: userId, token };
+  refreshToken(userId: string) {
+    return this.login(userId);
   }
 
   async validateGoogleUser(googleUser: CreateUserDto) {
-    const user = await this.userService.findByEmail(googleUser.email);
-    if (user) return user;
-    return this.userService.create(googleUser);
+    let user = await this.userService.findByEmail(googleUser.email);
+    if (!user) user = await this.userService.create(googleUser);
+    const withRole = await this.userService.syncAdminRole(user);
+    return this.userService.findOne(withRole.id);
   }
 }

@@ -1,18 +1,39 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from 'src/entities/user.entity';
 import { Repository } from 'typeorm';
-import { NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { TimezoneDto } from './dto/update-timezone.dto';
 import { UpdateUserSettingsDto } from './dto/update-settings.dto';
+import type { UserRole } from 'src/entities/user.entity';
+
+function parseAdminEmails(): Set<string> {
+  return new Set(
+    (process.env.ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
   constructor(@InjectRepository(User) private userRepo: Repository<User>) {}
+
+  async onModuleInit() {
+    const emails = [...parseAdminEmails()];
+    if (!emails.length) return;
+    await this.userRepo
+      .createQueryBuilder()
+      .update(User)
+      .set({ role: 'admin' })
+      .where('LOWER(email) IN (:...emails)', { emails })
+      .andWhere("role != 'admin'")
+      .execute();
+  }
   async create(createUserDto: CreateUserDto) {
     const { password, timezone, ...rest } = createUserDto;
     const secret = password?.trim() || randomBytes(32).toString('hex');
@@ -21,9 +42,17 @@ export class UserService {
       ...rest,
       time_zone: timezone?.trim() || 'UTC',
       password_hash,
+      role: parseAdminEmails().has(rest.email.toLowerCase()) ? 'admin' : 'user',
     });
 
     return await this.userRepo.save(user);
+  }
+
+  async syncAdminRole(user: { id: string; email: string; role: UserRole }) {
+    if (!parseAdminEmails().has(user.email.toLowerCase())) return user;
+    if (user.role === 'admin') return user;
+    await this.userRepo.update({ id: user.id }, { role: 'admin' });
+    return { ...user, role: 'admin' as const };
   }
 
   findAll() {
@@ -35,10 +64,12 @@ export class UserService {
 
     if (!user) throw new NotFoundException('User not found');
 
+    const withRole = await this.syncAdminRole(user);
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password_hash, ...safeUser } = user;
 
-    return safeUser;
+    return { ...safeUser, role: withRole.role ?? 'user' };
   }
 
   async findByEmail(email: string): Promise<User | null> {

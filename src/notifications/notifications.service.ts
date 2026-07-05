@@ -17,6 +17,10 @@ import {
   streakMilestoneCopy,
 } from './notification-copy';
 import { MailService } from '../mail/mail.service';
+import { TemplatePickerService } from './template-picker.service';
+import { renderTemplate } from './template-render';
+import { StorageService } from '../storage/storage.service';
+import { resolveInlineEmailImage } from '../mail/email-inline-image';
 
 interface CreateParams {
   userId: string;
@@ -51,6 +55,8 @@ export class NotificationsService {
     @InjectRepository(NotificationPreferences)
     private readonly prefsRepo: Repository<NotificationPreferences>,
     private readonly mailService: MailService,
+    private readonly templatePicker: TemplatePickerService,
+    private readonly storage: StorageService,
   ) {}
 
   async ensurePreferences(userId: string): Promise<NotificationPreferences> {
@@ -139,26 +145,19 @@ export class NotificationsService {
 
     if (prefs.streak_updates) {
       if ((STREAK_MILESTONES as readonly number[]).includes(currentStreak)) {
-        const milestone = streakMilestoneCopy(currentStreak);
-        const milestoneCreated = await this.createIfNew({
+        await this.notifyWithTemplate({
           userId,
           type: 'streak_milestone',
-          title: milestone.title,
-          body: milestone.body,
+          context: { streak: currentStreak },
           dedupeKey: dedupeKey(
             'streak_milestone',
             userId,
             String(currentStreak),
           ),
+          fallback: () => streakMilestoneCopy(currentStreak),
+          fallbackImage: IMAGES.yay,
+          email,
         });
-        if (milestoneCreated && email) {
-          await this.sendNudgeEmail(
-            email,
-            milestone.title,
-            milestone.body,
-            IMAGES.yay,
-          );
-        }
       }
     }
   }
@@ -169,67 +168,65 @@ export class NotificationsService {
     today: string,
     email?: string,
     isLastChance = false,
+    extraContext: Record<string, unknown> = {},
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.streak_nudges) return;
 
-    const copy = streakAtRiskCopy(currentStreak, isLastChance);
-    // different dedupe key so both 9PM and 11PM can fire
     const suffix = isLastChance ? `${today}:last` : `${today}:early`;
-    const created = await this.createIfNew({
+    await this.notifyWithTemplate({
       userId,
       type: 'streak_at_risk',
-      title: copy.title,
-      body: copy.body,
+      context: {
+        streak: currentStreak,
+        isLastChance,
+        today,
+        ...extraContext,
+      },
       dedupeKey: dedupeKey('streak_at_risk', userId, suffix),
+      fallback: () => streakAtRiskCopy(currentStreak, isLastChance),
+      fallbackImage: IMAGES.mad,
+      email,
     });
-
-    if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.mad);
-    }
   }
   async notifyDailyNudge(
     userId: string,
     today: string,
     email?: string,
+    extraContext: Record<string, unknown> = {},
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.streak_nudges) return;
 
-    const copy = dailyNudgeCopy();
-    const created = await this.createIfNew({
+    await this.notifyWithTemplate({
       userId,
       type: 'daily_nudge',
-      title: copy.title,
-      body: copy.body,
+      context: { today, ...extraContext },
       dedupeKey: dedupeKey('daily_nudge', userId, today),
+      fallback: () => dailyNudgeCopy(),
+      fallbackImage: IMAGES.sad,
+      email,
     });
-
-    if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.sad);
-    }
   }
 
   async notifyComeback(
     userId: string,
     daysAway: number,
     email?: string,
+    extraContext: Record<string, unknown> = {},
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.inactive_reminders) return;
 
-    const copy = comebackCopy(daysAway);
-    const created = await this.createIfNew({
+    await this.notifyWithTemplate({
       userId,
       type: 'comeback',
-      title: copy.title,
-      body: copy.body,
+      context: { daysAway, ...extraContext },
       dedupeKey: dedupeKey('comeback', userId, `${daysAway}d`),
+      fallback: () => comebackCopy(daysAway),
+      fallbackImage: IMAGES.sad,
+      email,
     });
-
-    if (created && email) {
-      await this.sendNudgeEmail(email, copy.title, copy.body, IMAGES.sad);
-    }
   }
 
   async userAllowsAnnouncements(userId: string): Promise<boolean> {
@@ -237,18 +234,245 @@ export class NotificationsService {
     return prefs.product_announcements;
   }
 
+  async sendTestNotification(params: {
+    userId: string;
+    email: string;
+    type: NotificationType;
+    templateId?: string;
+    sendEmail?: boolean;
+    context: Record<string, unknown>;
+  }) {
+    let title: string;
+    let body: string;
+    let imageUrl = this.fallbackImageForType(params.type);
+    let source: 'template' | 'fallback' = 'fallback';
+    let templateName: string | null = null;
+
+    if (params.templateId) {
+      const template = await this.templatePicker.findById(params.templateId);
+      if (!template) throw new NotFoundException('Template not found');
+      title = renderTemplate(template.title, params.context);
+      body = renderTemplate(template.body, params.context);
+      imageUrl = template.image_url ?? imageUrl;
+      source = 'template';
+      templateName = template.name;
+    } else {
+      const templatesConfigured = await this.templatePicker.hasActiveTemplates(
+        params.type,
+      );
+      const template = await this.templatePicker.pickTemplate(
+        params.type,
+        params.context,
+      );
+      if (template) {
+        title = renderTemplate(template.title, params.context);
+        body = renderTemplate(template.body, params.context);
+        imageUrl = template.image_url ?? imageUrl;
+        source = 'template';
+        templateName = template.name;
+      } else if (templatesConfigured) {
+        throw new NotFoundException(
+          'No eligible template for this type and context',
+        );
+      } else {
+        const copy = this.fallbackCopyForType(params.type, params.context);
+        title = copy.title;
+        body = copy.body;
+      }
+    }
+
+    const dedupeKey = `test:${params.type}:${params.userId}:${Date.now()}`;
+    const notification = await this.notificationRepo.save(
+      this.notificationRepo.create({
+        user_id: params.userId,
+        type: params.type,
+        title,
+        body,
+        dedupe_key: dedupeKey,
+        read_at: null,
+      }),
+    );
+
+    let emailSent = false;
+    if (params.sendEmail !== false) {
+      await this.sendNudgeEmail(params.email, title, body, imageUrl);
+      emailSent = this.mailService.isConfigured();
+    }
+
+    return {
+      notification,
+      title,
+      body,
+      source,
+      templateName,
+      emailSent,
+    };
+  }
+
+  async sendAdminDirectMessage(params: {
+    userId: string;
+    email: string;
+    type: NotificationType;
+    title: string;
+    body: string;
+    htmlBody?: string;
+    imageSource?: string;
+    sendEmail?: boolean;
+    dedupeKey: string;
+  }) {
+    const notification = await this.notificationRepo.save(
+      this.notificationRepo.create({
+        user_id: params.userId,
+        type: params.type,
+        title: params.title,
+        body: params.body,
+        dedupe_key: params.dedupeKey,
+        read_at: null,
+      }),
+    );
+
+    let emailSent = false;
+    if (params.sendEmail !== false) {
+      await this.sendNudgeEmail(
+        params.email,
+        params.title,
+        params.htmlBody ?? params.body,
+        params.imageSource,
+      );
+      emailSent = this.mailService.isConfigured();
+    }
+
+    return { notification, emailSent };
+  }
+
+  async sendAdminEmail(params: {
+    to: string;
+    title: string;
+    htmlBody: string;
+    imageSource?: string;
+  }): Promise<void> {
+    await this.sendNudgeEmail(
+      params.to,
+      params.title,
+      params.htmlBody,
+      params.imageSource,
+    );
+  }
+
+  private fallbackImageForType(type: NotificationType): string {
+    switch (type) {
+      case 'streak_at_risk':
+        return IMAGES.mad;
+      case 'streak_milestone':
+        return IMAGES.yay;
+      case 'daily_nudge':
+      case 'comeback':
+        return IMAGES.sad;
+      default:
+        return IMAGES.super;
+    }
+  }
+
+  private fallbackCopyForType(
+    type: NotificationType,
+    context: Record<string, unknown>,
+  ): { title: string; body: string } {
+    const streak = Number(context.streak ?? 7);
+    const daysAway = Number(context.daysAway ?? 5);
+    const isLastChance = Boolean(context.isLastChance);
+
+    switch (type) {
+      case 'streak_at_risk':
+        return streakAtRiskCopy(streak, isLastChance);
+      case 'streak_milestone':
+        return streakMilestoneCopy(streak);
+      case 'daily_nudge':
+        return dailyNudgeCopy();
+      case 'comeback':
+        return comebackCopy(daysAway);
+      case 'focus_complete':
+        return focusCompleteCopy();
+      default:
+        return { title: 'Test notification', body: 'This is a test from admin.' };
+    }
+  }
+
+  private async notifyWithTemplate(params: {
+    userId: string;
+    type: NotificationType;
+    context: Record<string, unknown>;
+    dedupeKey: string;
+    fallback: () => { title: string; body: string };
+    fallbackImage: string;
+    email?: string;
+  }): Promise<Notification | null> {
+    let title: string;
+    let body: string;
+    let imageUrl = params.fallbackImage;
+
+    const templatesConfigured = await this.templatePicker.hasActiveTemplates(
+      params.type,
+    );
+
+    const template = await this.templatePicker.pickTemplate(
+      params.type,
+      params.context,
+    );
+
+    if (template) {
+      title = renderTemplate(template.title, params.context);
+      body = renderTemplate(template.body, params.context);
+      imageUrl = template.image_url ?? params.fallbackImage;
+    } else if (templatesConfigured) {
+      this.logger.debug(
+        `Skipped ${params.type} for ${params.userId}: no eligible template`,
+      );
+      return null;
+    } else {
+      const copy = params.fallback();
+      title = copy.title;
+      body = copy.body;
+    }
+
+    const created = await this.createIfNew({
+      userId: params.userId,
+      type: params.type,
+      title,
+      body,
+      dedupeKey: params.dedupeKey,
+    });
+
+    if (created && params.email) {
+      await this.sendNudgeEmail(params.email, title, body, imageUrl);
+    }
+
+    return created;
+  }
+
   private async sendNudgeEmail(
     to: string,
     title: string,
     body: string,
-    imageUrl?: string,
+    imageSource?: string,
   ): Promise<void> {
     if (!this.mailService.isConfigured()) {
       this.logger.warn(`SMTP not configured; skipped email to ${to}`);
       return;
     }
     try {
-      await this.mailService.sendAnnouncement({ to, title, body, imageUrl });
+      const { inlineImage, imageUrl } = await resolveInlineEmailImage(
+        imageSource,
+        (stored) => this.storage.getObjectBuffer(stored),
+        { publicUrlForKey: (key) => this.storage.objectPublicUrl(key) },
+      );
+      await this.mailService.sendAnnouncement({
+        to,
+        title,
+        body,
+        inlineImage,
+        imageUrl,
+        imageAlt: title,
+      });
     } catch (err) {
       this.logger.error(
         `Failed to email ${to}: ${title}`,

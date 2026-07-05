@@ -5,7 +5,7 @@ import { AuthGuard } from '@nestjs/passport';
 export class GoogleAuthGuard extends AuthGuard('google') {
   getAuthenticateOptions(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest<{
-      query?: { timezone?: string };
+      query?: { timezone?: string; returnTo?: string };
     }>();
     const res = context.switchToHttp().getResponse<{
       cookie: (name: string, value: string, options: object) => void;
@@ -14,6 +14,17 @@ export class GoogleAuthGuard extends AuthGuard('google') {
     const timezone = req.query?.timezone?.trim();
     if (timezone) {
       res.cookie('oauth_timezone', timezone, {
+        httpOnly: true,
+        maxAge: 10 * 60 * 1000,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+      });
+    }
+
+    const returnTo = req.query?.returnTo?.trim();
+    if (returnTo && returnTo.startsWith('/')) {
+      res.cookie('oauth_return_to', returnTo, {
         httpOnly: true,
         maxAge: 10 * 60 * 1000,
         sameSite: 'lax',

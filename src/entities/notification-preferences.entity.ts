@@ -1,18 +1,9 @@
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  OneToOne,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('notification_preferences')
 export class NotificationPreferences {
-  @PrimaryGeneratedColumn('uuid')
-  id!: string;
-
-  @Column('uuid', { unique: true })
+  @PrimaryColumn('uuid')
   user_id!: string;
 
   @OneToOne(() => User, { onDelete: 'CASCADE' })

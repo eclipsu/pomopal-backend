@@ -18,12 +18,11 @@ describe('notification-card-email', () => {
     const html = buildNotificationCardHtml({
       title: 'New feature',
       body: 'Try it now.',
-      imageUrl: 'https://pomopal.lol/og.png',
+      imageUrl: 'cid:pomopal-notification-image',
       imageAlt: 'Pomopal preview',
     });
-    expect(html).toContain('src="https://pomopal.lol/og.png"');
+    expect(html).toContain('src="cid:pomopal-notification-image"');
     expect(html).toContain('alt="Pomopal preview"');
-    expect(html).not.toContain('🍅');
   });
 
   it('renders CTA button with link', () => {
