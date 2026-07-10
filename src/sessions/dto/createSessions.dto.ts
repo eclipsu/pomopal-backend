@@ -1,4 +1,5 @@
-import { IsEnum, IsInt, Min } from 'class-validator';
+import { IsEnum, IsInt, IsObject, IsOptional, Min } from 'class-validator';
+import type { SessionContextSnapshot } from '../../entities/sessions.entity';
 import { SessionType } from '../../entities/sessions.entity';
 
 export class CreateSessionDto {
@@ -8,4 +9,8 @@ export class CreateSessionDto {
   @IsInt()
   @Min(1)
   planned_minutes: number;
+
+  @IsOptional()
+  @IsObject()
+  session_context?: SessionContextSnapshot;
 }

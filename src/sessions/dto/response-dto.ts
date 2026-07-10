@@ -1,3 +1,5 @@
+import type { SessionContextSnapshot } from '../../entities/sessions.entity';
+
 export class SessionResponseDto {
   id: string;
   userId: string;
@@ -7,4 +9,5 @@ export class SessionResponseDto {
   started_at: Date;
   ended_at?: Date;
   completed: boolean;
+  session_context?: SessionContextSnapshot | null;
 }

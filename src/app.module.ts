@@ -17,6 +17,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { StorageModule } from './storage/storage.module';
+import { SoundsModule } from './sounds/sounds.module';
 import jwtConfig from './auth/config/jwt.config';
 
 @Module({
@@ -38,6 +39,7 @@ import jwtConfig from './auth/config/jwt.config';
     NotificationsModule,
     AdminModule,
     StorageModule,
+    SoundsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
