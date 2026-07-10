@@ -44,6 +44,7 @@ export class SessionsService {
       actual_duration_minutes: 0,
       started_at: new Date(),
       completed: false,
+      session_context: dto.session_context ?? null,
     });
 
     const date = toUserDate(
@@ -140,6 +141,7 @@ export class SessionsService {
       actual_duration_minutes: 0,
       started_at: new Date(),
       completed: false,
+      session_context: dto.session_context ?? null,
     });
     return await this.sessionRepo.save(session);
   }
@@ -194,6 +196,7 @@ export class SessionsService {
       started_at: session.started_at,
       ended_at: session.ended_at,
       completed: session.completed,
+      session_context: session.session_context ?? null,
     };
   }
 }

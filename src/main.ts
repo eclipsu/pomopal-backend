@@ -6,6 +6,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { getCorsOriginConfig } from './config/cors.config';
 import { SocketIoAdapter } from './socket-io.adapter';
 
@@ -42,6 +43,7 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  app.useGlobalFilters(new GlobalExceptionFilter());
   app.useWebSocketAdapter(new SocketIoAdapter(app));
 
   const port = Number(process.env.PORT) || 8000;

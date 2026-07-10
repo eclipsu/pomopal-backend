@@ -14,6 +14,24 @@ export enum SessionType {
   LONG_BREAK = 'long_break',
 }
 
+export interface SessionSoundSnapshot {
+  enabled?: boolean;
+  volume?: number;
+  kind: 'default' | 'library' | 'youtube' | 'none';
+  id?: string | null;
+  videoId?: string | null;
+  name?: string | null;
+  title?: string | null;
+}
+
+export interface SessionContextSnapshot {
+  timer_mode_index: number;
+  timer_mode_label: 'pomodoro' | 'short_break' | 'long_break';
+  timer_planned_minutes: number;
+  background_sound: SessionSoundSnapshot;
+  ring_sound: SessionSoundSnapshot;
+}
+
 @Entity('sessions')
 @Index(['user', 'started_at'])
 export class Session {
@@ -40,6 +58,9 @@ export class Session {
 
   @Column({ default: false })
   completed: boolean;
+
+  @Column({ type: 'jsonb', nullable: true })
+  session_context?: SessionContextSnapshot | null;
 
   @CreateDateColumn()
   created_at: Date;
