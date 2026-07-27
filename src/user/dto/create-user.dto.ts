@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsUrl, MaxLength, MinLength } from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
@@ -12,6 +12,13 @@ export class CreateUserDto {
 
   @IsString()
   timezone: string;
+
+  /** First name, all lowercase letters. Required for email signup. */
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(32)
+  username?: string;
 
   @IsNumber()
   @IsOptional()

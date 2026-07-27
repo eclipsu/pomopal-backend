@@ -24,6 +24,10 @@ export class User {
   @Column()
   name!: string;
 
+  /** Public URL handle — unique, lowercase slug. */
+  @Column({ type: 'varchar', length: 32, unique: true, nullable: true })
+  username!: string | null;
+
   @Column({ unique: true })
   email!: string;
 

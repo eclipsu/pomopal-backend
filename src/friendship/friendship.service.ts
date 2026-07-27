@@ -203,6 +203,19 @@ export class FriendshipService {
     await this.friendshipRepo.remove(friendship);
   }
 
+  async areFriends(userA: string, userB: string): Promise<boolean> {
+    if (!userA || !userB || userA === userB) return false;
+    const row = await this.friendshipRepo
+      .createQueryBuilder('f')
+      .where('f.status = :status', { status: 'accepted' })
+      .andWhere(
+        '((f.requester_id = :a AND f.addressee_id = :b) OR (f.requester_id = :b AND f.addressee_id = :a))',
+        { a: userA, b: userB },
+      )
+      .getOne();
+    return Boolean(row);
+  }
+
   async block(userId: string, targetId: string): Promise<void> {
     const existing = await this.findFriendshipBetween(userId, targetId);
 

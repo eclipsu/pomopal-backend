@@ -1,7 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { UserService } from 'src/user/user.service';
 import { LocalStrategy } from './strategies/local.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PassportModule } from '@nestjs/passport';
@@ -15,10 +14,12 @@ import googleOauthConfig from './config/google-oauth.config';
 import { GoogleStrategy } from './strategies/google.strategy';
 import type { JwtModuleOptions } from '@nestjs/jwt';
 import type { StringValue } from 'ms';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
+    forwardRef(() => UserModule),
 
     PassportModule.register({ defaultStrategy: 'jwt' }),
 
@@ -39,7 +40,6 @@ import type { StringValue } from 'ms';
   controllers: [AuthController],
   providers: [
     AuthService,
-    UserService,
     LocalStrategy,
     JwtStrategy,
     RefreshJwtStrategy,

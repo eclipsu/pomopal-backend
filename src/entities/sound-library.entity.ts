@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 
 export type SoundType = 'background' | 'ring';
+export type SoundSource = 's3' | 'youtube';
 
 @Entity('sound_library')
 export class SoundLibrary {
@@ -19,8 +20,17 @@ export class SoundLibrary {
   @Column({ type: 'varchar', length: 20 })
   type!: SoundType;
 
-  @Column({ type: 'varchar', length: 512 })
-  s3_key!: string;
+  /** Where the audio comes from. YouTube entries never use S3. */
+  @Column({ type: 'varchar', length: 20, default: 's3' })
+  source!: SoundSource;
+
+  /** S3 object key — null for YouTube-sourced sounds. */
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  s3_key!: string | null;
+
+  /** Canonical 11-char YouTube video id when source=youtube. */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  youtube_video_id!: string | null;
 
   @Column({ type: 'boolean', default: true })
   active!: boolean;

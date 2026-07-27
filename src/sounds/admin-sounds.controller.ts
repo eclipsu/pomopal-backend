@@ -14,16 +14,27 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 import { AdminGuard } from '../auth/guards/admin/admin.guard';
 import type { AuthJwtPayload } from '../auth/types/auth-jwtPayload';
 import type { SoundType } from '../entities/sound-library.entity';
+import { CreateYoutubeSoundDto } from './dto/create-youtube-sound.dto';
 import { UpdateSoundDto } from './dto/update-sound.dto';
 import { SoundsService } from './sounds.service';
+import { getMaxAudioBytes } from '../storage/storage.service';
 
 const audioUpload = FileInterceptor('audio', {
-  storage: memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  storage: diskStorage({
+    destination: (_req, _file, cb) => cb(null, tmpdir()),
+    filename: (_req, file, cb) => {
+      const ext = extname(file.originalname || '') || '.mp3';
+      cb(null, `pomopal-sound-${randomUUID()}${ext}`);
+    },
+  }),
+  limits: { fileSize: getMaxAudioBytes() },
 });
 
 @Controller('admin/sounds')
@@ -42,6 +53,20 @@ export class AdminSoundsController {
   @Get(':id')
   getOne(@Param('id') id: string) {
     return this.sounds.findOneAdmin(id);
+  }
+
+  /** Metadata-only: name a YouTube link for the curated library (no S3). */
+  @Post('from-youtube')
+  fromYoutube(
+    @Body() dto: CreateYoutubeSoundDto,
+    @Req() req?: { user?: AuthJwtPayload },
+  ) {
+    return this.sounds.createFromYoutube(
+      dto.url,
+      dto.name,
+      dto.type ?? 'background',
+      req?.user?.sub,
+    );
   }
 
   @Post('upload-url')

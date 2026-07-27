@@ -27,4 +27,11 @@ export class UserPrivacy {
 
   @Column({ default: true })
   show_on_leaderboard!: boolean;
+
+  /**
+   * When false, profile at /:username is friends-only.
+   * Spaces still follow each space's own visibility.
+   */
+  @Column({ default: true })
+  profile_public!: boolean;
 }

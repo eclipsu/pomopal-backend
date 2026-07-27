@@ -18,6 +18,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { StorageModule } from './storage/storage.module';
 import { SoundsModule } from './sounds/sounds.module';
+import { FontsModule } from './fonts/fonts.module';
+import { SpacesModule } from './spaces/spaces.module';
 import jwtConfig from './auth/config/jwt.config';
 
 @Module({
@@ -40,6 +42,8 @@ import jwtConfig from './auth/config/jwt.config';
     AdminModule,
     StorageModule,
     SoundsModule,
+    FontsModule,
+    SpacesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

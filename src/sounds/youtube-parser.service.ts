@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -11,12 +12,25 @@ import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
+import Redis from 'ioredis';
 import {
   buildYoutubeWatchUrl,
   extractYoutubeVideoId,
 } from './youtube.util';
 
 const execFileAsync = promisify(execFile);
+
+/** Direct-URL resolution is metadata only — should be fast. */
+const STREAM_URL_TIMEOUT_MS = 30_000;
+/** Fallback cache TTL when the URL carries no `expire` param. */
+const STREAM_URL_FALLBACK_TTL_SEC = 60 * 60;
+const streamUrlCacheKey = (videoId: string) => `yt:streamurl:${videoId}`;
+
+export interface ResolvedStreamUrl {
+  url: string;
+  /** Best-effort content type inferred from the format; may be null. */
+  contentType: string | null;
+}
 
 /** Ambient tracks are often 2–3 hours. */
 const DEFAULT_MAX_DURATION_SECONDS = 3 * 60 * 60;
@@ -135,8 +149,103 @@ export class YoutubeParserService {
     process.env.YOUTUBE_MAX_AUDIO_BYTES || DEFAULT_MAX_AUDIO_BYTES,
   );
 
+  constructor(
+    @Inject('REDIS_CLIENT')
+    private readonly redis: Redis,
+  ) {}
+
   async parse(urlOrId: string): Promise<ParsedYoutubeAudio> {
     return this.parseWithProgress(urlOrId);
+  }
+
+  /**
+   * Resolve the direct (googlevideo) audio URL for progressive streaming.
+   * These URLs are short-lived and IP-locked to this server, so we cache
+   * them in Redis until shortly before their `expire` timestamp and always
+   * proxy playback from the same host that resolved them.
+   */
+  async getStreamUrl(
+    videoId: string,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<ResolvedStreamUrl> {
+    const key = streamUrlCacheKey(videoId);
+    if (!options.forceRefresh) {
+      const cached = await this.redis.get(key);
+      if (cached) {
+        try {
+          return JSON.parse(cached) as ResolvedStreamUrl;
+        } catch {
+          // fall through and re-resolve
+        }
+      }
+    }
+
+    const resolved = await this.resolveStreamUrl(videoId);
+    const ttl = this.streamUrlTtlSeconds(resolved.url);
+    await this.redis.setex(key, ttl, JSON.stringify(resolved));
+    return resolved;
+  }
+
+  private async resolveStreamUrl(videoId: string): Promise<ResolvedStreamUrl> {
+    const watchUrl = buildYoutubeWatchUrl(videoId);
+    try {
+      const { stdout } = await execFileAsync(
+        this.ytDlpPath,
+        [
+          ...YT_DLP_COMMON_ARGS,
+          '-f',
+          FAST_AUDIO_FORMAT,
+          '--get-url',
+          watchUrl,
+        ],
+        { timeout: STREAM_URL_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
+      );
+      const url = stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)[0];
+      if (!url || !/^https?:\/\//.test(url)) {
+        throw new BadRequestException('Could not resolve audio stream');
+      }
+      return { url, contentType: this.contentTypeFromStreamUrl(url) };
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      if (this.isMissingBinaryError(err)) {
+        throw new ServiceUnavailableException(
+          'YouTube audio extraction is not available on this server',
+        );
+      }
+      this.logger.warn(
+        `yt-dlp stream-url failed: ${this.formatExecError(err)}`,
+      );
+      throw new BadRequestException(
+        'Could not resolve audio stream — check the URL and try again',
+      );
+    }
+  }
+
+  private contentTypeFromStreamUrl(url: string): string | null {
+    try {
+      const mime = new URL(url).searchParams.get('mime');
+      if (mime) return decodeURIComponent(mime);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  private streamUrlTtlSeconds(url: string): number {
+    try {
+      const expire = new URL(url).searchParams.get('expire');
+      if (expire && /^\d+$/.test(expire)) {
+        const secondsLeft = Number(expire) - Math.floor(Date.now() / 1000);
+        // Refresh a minute early to avoid mid-playback 403s.
+        if (secondsLeft > 120) return secondsLeft - 60;
+      }
+    } catch {
+      // ignore
+    }
+    return STREAM_URL_FALLBACK_TTL_SEC;
   }
 
   async parseWithProgress(

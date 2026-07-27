@@ -24,4 +24,8 @@ export class UpdatePrivacyDto {
   @IsOptional()
   @IsBoolean()
   show_on_leaderboard?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  profile_public?: boolean;
 }

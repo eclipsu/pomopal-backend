@@ -100,6 +100,28 @@ export class DailyStatsService {
     }));
   }
 
+  /** Non-zero focus days only — for contribution graphs / profiles. */
+  async getActiveDays(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<{ date: string; minutes: number }[]> {
+    const rows = await this.dailyStatRepo
+      .createQueryBuilder('d')
+      .select('d.date', 'date')
+      .addSelect('d.total_focus_minutes', 'minutes')
+      .where('d.userId = :uid', { uid: userId })
+      .andWhere('d.date BETWEEN :from AND :to', { from, to })
+      .andWhere('d.total_focus_minutes > 0')
+      .orderBy('d.date', 'ASC')
+      .getRawMany<{ date: string | Date; minutes: string | number }>();
+
+    return rows.map((r) => ({
+      date: statDateKey(r.date),
+      minutes: Number(r.minutes) || 0,
+    }));
+  }
+
   async getTotalHours(
     userId: string,
     from?: string,
