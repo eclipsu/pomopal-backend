@@ -23,7 +23,7 @@ export default (): PostgresConnectionOptions => ({
   username: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  synchronize: false,
+  synchronize: true,
   migrationsRun: true,
   ssl: resolveSsl(),
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
