@@ -112,6 +112,10 @@ export class StorageService {
         accessKeyId && secretAccessKey
           ? { accessKeyId, secretAccessKey }
           : undefined,
+      // Presigned browser PUTs break when the SDK embeds optional CRC32
+      // checksum params the browser never sends. Only checksum when required.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
   }
 
