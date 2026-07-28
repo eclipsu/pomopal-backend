@@ -20,6 +20,8 @@ import {
   AnnouncementSmtpConfig,
   sendAnnouncementEmail,
 } from '../src/mail/announcement-email';
+import { renderTemplate } from '../src/notifications/template-render';
+import { stripHtml } from '../src/mail/notification-card-email';
 
 function loadEnvFile(): void {
   const envPath = resolve(__dirname, '../.env');
@@ -159,13 +161,25 @@ async function main(): Promise<void> {
 
   try {
     const users = await dataSource.getRepository(User).find({
-      select: ['id', 'email'],
+      select: ['id', 'email', 'username'],
     });
 
     if (!users.length) {
       console.log('No users found.');
       return;
     }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const renderForUser = (username: string | null) => {
+      const ctx = { today, username: username ?? '' };
+      const renderedTitle = renderTemplate(title, ctx);
+      const renderedBody = renderTemplate(body, ctx);
+      return {
+        title: renderedTitle,
+        body: renderedBody,
+        plainBody: stripHtml(renderedBody),
+      };
+    };
 
     const runId = randomUUID().slice(0, 8);
     console.log(`Run ${runId} — ${dryRun ? 'DRY RUN' : 'LIVE'}`);
@@ -177,6 +191,9 @@ async function main(): Promise<void> {
     if (link) console.log(`Link:  ${link} (${ctaLabel})`);
 
     if (dryRun) {
+      const sample = renderForUser('username');
+      console.log(`Sample title: ${sample.title}`);
+      console.log(`Sample body:  ${sample.body}`);
       if (sendEmail) {
         console.log(`Would email ${users.length} user(s).`);
       }
@@ -214,16 +231,17 @@ async function main(): Promise<void> {
         return pref ? pref.product_announcements : true;
       });
 
-      const rows = toNotify.map((u) =>
-        repo.create({
+      const rows = toNotify.map((u) => {
+        const content = renderForUser(u.username);
+        return repo.create({
           user_id: u.id,
           type: 'announcement',
-          title,
-          body,
+          title: content.title,
+          body: content.plainBody,
           read_at: null,
           dedupe_key: `announcement:${runId}:${u.id}`,
-        }),
-      );
+        });
+      });
 
       if (rows.length) {
         await repo.insert(rows);
@@ -233,11 +251,12 @@ async function main(): Promise<void> {
 
       if (sendEmail && smtp) {
         for (const user of toNotify) {
+          const content = renderForUser(user.username);
           try {
             await sendAnnouncementEmail(smtp, {
               to: user.email,
-              title,
-              body,
+              title: content.title,
+              body: content.body,
               imageUrl,
               cta: link ? { label: ctaLabel, href: link } : undefined,
             });

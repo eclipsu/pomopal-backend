@@ -440,6 +440,7 @@ export class FriendshipService {
     const profile: FriendProfileDto = {
       id: friend.id,
       name: friend.name,
+      username: friend.username ?? null,
       avatar_url: friend.avatar_url ?? null,
       visibility,
     };

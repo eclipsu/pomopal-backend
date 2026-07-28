@@ -75,7 +75,7 @@ export class AdminService {
   async testSend(dto: TestSendNotificationDto) {
     const user = await this.users.findOne({
       where: { id: dto.userId },
-      select: ['id', 'email', 'name'],
+      select: ['id', 'email', 'name', 'username'],
     });
     if (!user) throw new NotFoundException('User not found');
 
@@ -91,6 +91,7 @@ export class AdminService {
         isLastChance: dto.isLastChance ?? false,
         completedSessions: 10,
         today: new Date().toISOString().slice(0, 10),
+        username: user.username ?? '',
       },
     });
   }
@@ -98,7 +99,7 @@ export class AdminService {
   async reviveStreak(dto: ReviveStreakDto) {
     const user = await this.users.findOne({
       where: { id: dto.userId },
-      select: ['id', 'email', 'name'],
+      select: ['id', 'email', 'name', 'username'],
     });
     if (!user) throw new NotFoundException('User not found');
 
@@ -112,7 +113,10 @@ export class AdminService {
       title: dto.title,
       body: dto.body,
       imageKey: dto.image_key,
-      context: { streak: eligibility.current_streak },
+      context: {
+        streak: eligibility.current_streak,
+        username: user.username ?? '',
+      },
       fallbackTitle: 'Streak restored',
       fallbackBody: `We restored your ${eligibility.current_streak}-day streak. Thank you for using Pomopal — let's keep it going!`,
     });
@@ -140,28 +144,34 @@ export class AdminService {
   }
 
   async broadcastAnnouncement(dto: BroadcastAnnouncementDto) {
-    const content = await this.resolveMessageContent({
+    const raw = await this.resolveRawMessageContent({
       templateId: dto.templateId,
       title: dto.title,
       body: dto.body,
       imageKey: dto.image_key,
-      context: { today: new Date().toISOString().slice(0, 10) },
       fallbackTitle: 'Announcement',
       fallbackBody: '',
       requireBody: true,
     });
 
-    const allUsers = await this.users.find({ select: ['id', 'email'] });
+    const today = new Date().toISOString().slice(0, 10);
+    const allUsers = await this.users.find({
+      select: ['id', 'email', 'username'],
+    });
     if (!allUsers.length) {
       return { inserted: 0, skipped: 0, emailed: 0, emailFailed: 0, dryRun: dto.dryRun ?? false };
     }
 
     if (dto.dryRun) {
+      const sample = this.renderMessageContent(raw, {
+        today,
+        username: 'username',
+      });
       return {
         dryRun: true,
         users: allUsers.length,
-        title: content.title,
-        body: content.htmlBody,
+        title: sample.title,
+        body: sample.htmlBody,
         sendEmail: dto.sendEmail ?? true,
       };
     }
@@ -193,18 +203,29 @@ export class AdminService {
         return pref ? pref.product_announcements : true;
       });
 
+      const renderedByUser = new Map(
+        toNotify.map((u) => [
+          u.id,
+          this.renderMessageContent(raw, {
+            today,
+            username: u.username ?? '',
+          }),
+        ]),
+      );
+
       if (toNotify.length) {
         await this.notificationsRepo.insert(
-          toNotify.map((u) =>
-            this.notificationsRepo.create({
+          toNotify.map((u) => {
+            const content = renderedByUser.get(u.id)!;
+            return this.notificationsRepo.create({
               user_id: u.id,
               type: 'announcement',
               title: content.title,
               body: content.plainBody,
               dedupe_key: `announcement:${runId}:${u.id}`,
               read_at: null,
-            }),
-          ),
+            });
+          }),
         );
         inserted += toNotify.length;
       }
@@ -212,6 +233,7 @@ export class AdminService {
 
       if (dto.sendEmail !== false) {
         for (const user of toNotify) {
+          const content = renderedByUser.get(user.id)!;
           try {
             await this.notifications.sendAdminEmail({
               to: user.email,
@@ -237,11 +259,17 @@ export class AdminService {
       daysAway: dto.daysAway ?? 5,
       isLastChance: dto.isLastChance ?? false,
       today: new Date().toISOString().slice(0, 10),
+      username: 'username',
     };
 
     if (dto.userId) {
       const eligibility = await this.streaks.getReviveEligibility(dto.userId);
       context.streak = eligibility.current_streak;
+      const user = await this.users.findOne({
+        where: { id: dto.userId },
+        select: ['username'],
+      });
+      if (user?.username) context.username = user.username;
     }
 
     const hasContent =
@@ -286,6 +314,19 @@ export class AdminService {
     fallbackBody: string;
     requireBody?: boolean;
   }) {
+    const raw = await this.resolveRawMessageContent(params);
+    return this.renderMessageContent(raw, params.context);
+  }
+
+  private async resolveRawMessageContent(params: {
+    templateId?: string;
+    title?: string;
+    body?: string;
+    imageKey?: string;
+    fallbackTitle: string;
+    fallbackBody: string;
+    requireBody?: boolean;
+  }) {
     let title = params.title?.trim() ?? '';
     let htmlBody = params.body?.trim() ?? '';
     let imageSource: string | undefined;
@@ -293,8 +334,8 @@ export class AdminService {
     if (params.templateId) {
       const template = await this.templatePicker.findById(params.templateId);
       if (!template) throw new NotFoundException('Template not found');
-      title = renderTemplate(template.title, params.context);
-      htmlBody = renderTemplate(template.body, params.context);
+      title = template.title;
+      htmlBody = template.body;
       imageSource = template.image_url ?? undefined;
     }
 
@@ -317,7 +358,20 @@ export class AdminService {
       throw new BadRequestException('Message body cannot be empty');
     }
 
-    const plainBody = stripHtml(htmlBody);
-    return { title, htmlBody, plainBody, imageSource };
+    return { title, htmlBody, imageSource };
+  }
+
+  private renderMessageContent(
+    raw: { title: string; htmlBody: string; imageSource?: string },
+    context: Record<string, unknown>,
+  ) {
+    const title = renderTemplate(raw.title, context);
+    const htmlBody = renderTemplate(raw.htmlBody, context);
+    return {
+      title,
+      htmlBody,
+      plainBody: stripHtml(htmlBody),
+      imageSource: raw.imageSource,
+    };
   }
 }

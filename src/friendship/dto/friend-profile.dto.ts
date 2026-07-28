@@ -4,6 +4,7 @@ import { FriendProfileVisibilityDto } from './friend-profile-visibility.dto';
 export class FriendProfileDto {
   id!: string;
   name!: string;
+  username!: string | null;
   avatar_url!: string | null;
 
   status?: PresenceStatus;
