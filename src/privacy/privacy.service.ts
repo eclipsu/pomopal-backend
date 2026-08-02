@@ -1,14 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserPrivacy } from 'src/entities/user-privacy.entity';
 import { UpdatePrivacyDto } from './dto/update-privacy.dto';
+import { LeaderboardService } from '../leaderboard/leaderboard.service';
 
 @Injectable()
 export class PrivacyService {
+  private readonly logger = new Logger(PrivacyService.name);
+
   constructor(
     @InjectRepository(UserPrivacy)
     private readonly privacyRepo: Repository<UserPrivacy>,
+    @Inject(forwardRef(() => LeaderboardService))
+    private readonly leaderboardService: LeaderboardService,
   ) {}
 
   async getPrivacy(userId: string): Promise<UserPrivacy> {
@@ -25,6 +30,19 @@ export class PrivacyService {
   ): Promise<UserPrivacy> {
     const privacy = await this.getPrivacy(userId);
     Object.assign(privacy, dto);
-    return this.privacyRepo.save(privacy);
+    const saved = await this.privacyRepo.save(privacy);
+
+    if (dto.show_on_leaderboard !== undefined) {
+      try {
+        await this.leaderboardService.updateGlobalAllTime(userId);
+        await this.leaderboardService.invalidateForUser(userId);
+      } catch (err) {
+        this.logger.warn(
+          `Leaderboard sync after privacy update failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return saved;
   }
 }

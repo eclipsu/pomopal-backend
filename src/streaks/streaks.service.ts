@@ -9,8 +9,10 @@ import {
   yesterdayInTz,
   normalizeTimezone,
   streakDateToYmd,
+  daysBetweenYmd,
 } from 'src/common/time';
 import { MailService } from '../mail/mail.service';
+import { STREAK_GRACE_DAYS } from './streak.constants';
 
 export type StreakReviveStatus = 'none' | 'active' | 'at_risk' | 'broken';
 
@@ -22,6 +24,7 @@ export interface StreakReviveEligibility {
   displayed_streak: number;
   longest_streak: number;
   last_active_date: string | null;
+  grace_days_remaining?: number;
 }
 
 @Injectable()
@@ -53,10 +56,17 @@ export class StreaksService {
       return this.streakRepo.save(streak);
     }
 
-    if (streak.last_active_date === date) return streak;
-    const yesterday = this.shiftDate(date, -1);
+    const lastActive = streakDateToYmd(
+      streak.last_active_date,
+      normalizeTimezone(user.time_zone),
+    );
+    if (!lastActive || lastActive === date) return streak;
 
-    if (streak.last_active_date === yesterday) streak.current_streak += 1;
+    const gap = daysBetweenYmd(lastActive, date);
+    if (gap <= 0) return streak;
+
+    // Within grace: continue streak. Beyond grace: reset.
+    if (gap <= STREAK_GRACE_DAYS) streak.current_streak += 1;
     else streak.current_streak = 1;
 
     streak.longest_streak = Math.max(
@@ -75,24 +85,41 @@ export class StreaksService {
     });
 
     if (!streak || !streak.last_active_date)
-      return { current_streak: 0, longest_streak: 0 };
+      return {
+        current_streak: 0,
+        longest_streak: 0,
+        last_active_date: null,
+        grace_days_remaining: 0,
+      };
 
     const tz = normalizeTimezone(streak.user?.time_zone);
     const today = todayInTz(tz);
-    const yesterday = yesterdayInTz(tz);
-
     const lastActiveDate = streakDateToYmd(streak.last_active_date, tz);
     if (!lastActiveDate) {
-      return { current_streak: 0, longest_streak: streak.longest_streak };
+      return {
+        current_streak: 0,
+        longest_streak: streak.longest_streak,
+        last_active_date: null,
+        grace_days_remaining: 0,
+      };
     }
 
-    if (lastActiveDate === today || lastActiveDate === yesterday)
+    const gap = daysBetweenYmd(lastActiveDate, today);
+    if (gap >= 0 && gap <= STREAK_GRACE_DAYS) {
       return {
         current_streak: streak.current_streak,
         longest_streak: streak.longest_streak,
+        last_active_date: lastActiveDate,
+        grace_days_remaining: STREAK_GRACE_DAYS - gap,
       };
+    }
 
-    return { current_streak: 0, longest_streak: streak.longest_streak };
+    return {
+      current_streak: 0,
+      longest_streak: streak.longest_streak,
+      last_active_date: lastActiveDate,
+      grace_days_remaining: 0,
+    };
   }
 
   async getReviveEligibility(userId: string): Promise<StreakReviveEligibility> {
@@ -110,12 +137,12 @@ export class StreaksService {
         displayed_streak: 0,
         longest_streak: streak?.longest_streak ?? 0,
         last_active_date: null,
+        grace_days_remaining: 0,
       };
     }
 
     const tz = normalizeTimezone(streak.user?.time_zone);
     const today = todayInTz(tz);
-    const yesterday = yesterdayInTz(tz);
     const lastActive = streakDateToYmd(streak.last_active_date, tz);
 
     const base = {
@@ -124,23 +151,42 @@ export class StreaksService {
       last_active_date: lastActive,
     };
 
-    if (lastActive === today) {
+    if (!lastActive) {
+      return {
+        ...base,
+        status: 'broken',
+        eligible: false,
+        reason: 'Invalid last active date',
+        displayed_streak: 0,
+        grace_days_remaining: 0,
+      };
+    }
+
+    const gap = daysBetweenYmd(lastActive, today);
+
+    if (gap === 0) {
       return {
         ...base,
         status: 'active',
         eligible: false,
         reason: 'Streak is active — user focused today',
         displayed_streak: streak.current_streak,
+        grace_days_remaining: STREAK_GRACE_DAYS,
       };
     }
 
-    if (lastActive === yesterday) {
+    if (gap >= 1 && gap <= STREAK_GRACE_DAYS) {
+      const remaining = STREAK_GRACE_DAYS - gap;
       return {
         ...base,
         status: 'at_risk',
         eligible: false,
-        reason: 'Streak is still active — user has until end of day to focus',
+        reason:
+          remaining === 0
+            ? `Streak is at risk — last day of the ${STREAK_GRACE_DAYS}-day grace period`
+            : `Streak is at risk — ${remaining} grace day${remaining === 1 ? '' : 's'} left`,
         displayed_streak: streak.current_streak,
+        grace_days_remaining: remaining,
       };
     }
 
@@ -151,6 +197,7 @@ export class StreaksService {
         eligible: false,
         reason: 'No streak count to restore',
         displayed_streak: 0,
+        grace_days_remaining: 0,
       };
     }
 
@@ -160,6 +207,7 @@ export class StreaksService {
       eligible: true,
       reason: 'Eligible — streak is broken and can be revived',
       displayed_streak: 0,
+      grace_days_remaining: 0,
     };
   }
 
@@ -179,6 +227,7 @@ export class StreaksService {
     if (!streak) throw new BadRequestException('No streak found');
 
     const tz = normalizeTimezone(streak.user?.time_zone);
+    // Put user back into at-risk (1 day into grace) so they must focus soon.
     const yesterday = yesterdayInTz(tz);
     streak.last_active_date = yesterday;
     await this.streakRepo.save(streak);
@@ -204,11 +253,5 @@ export class StreaksService {
     }
 
     return result;
-  }
-
-  private shiftDate(date: string, days: number): string {
-    const d = new Date(date);
-    d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
   }
 }

@@ -29,4 +29,10 @@ export class LeaderboardController {
       cleanPeriod,
     );
   }
+
+  /** GET /leaderboard/global/alltime — top 10 global focus all-time */
+  @Get('global/alltime')
+  async getGlobalAllTime() {
+    return this.leaderboardService.getGlobalAllTimeLeaderboard();
+  }
 }

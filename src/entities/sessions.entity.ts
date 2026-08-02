@@ -34,6 +34,7 @@ export interface SessionContextSnapshot {
 
 @Entity('sessions')
 @Index(['user', 'started_at'])
+@Index(['user', 'session_name_hash'])
 export class Session {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -43,6 +44,13 @@ export class Session {
 
   @Column({ type: 'enum', enum: SessionType })
   type: SessionType;
+
+  @Column({ type: 'varchar', length: 80, nullable: true, default: 'Untitled Session' })
+  session_name?: string | null;
+
+  /** sha256 of lowercase normalized name — groups similar labels for analytics */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  session_name_hash?: string | null;
 
   @Column()
   planned_duration_minutes: number;

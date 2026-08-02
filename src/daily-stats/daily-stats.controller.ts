@@ -29,4 +29,12 @@ export class DailyStatsController {
       .getAllTimeFocusMinutes(req.user.sub)
       .then((total_focus_minutes) => ({ total_focus_minutes }));
   }
+
+  @Get('/session-names')
+  getSessionNames(@Req() req: any, @Query('limit') limit?: string) {
+    return this.dailyStatsService.getSessionNameBreakdown(
+      req.user.sub,
+      limit ? parseInt(limit, 10) : undefined,
+    );
+  }
 }

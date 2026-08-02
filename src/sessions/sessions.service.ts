@@ -12,8 +12,13 @@ import { SessionResponseDto } from './dto/response-dto';
 import { DailyStatsService } from 'src/daily-stats/daily-stats.service';
 import { StreaksService } from 'src/streaks/streaks.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { LeaderboardService } from 'src/leaderboard/leaderboard.service';
 import { User } from 'src/entities/user.entity';
 import { normalizeTimezone, toUserDate } from '../common/time';
+import {
+  hashSessionName,
+  normalizeSessionName,
+} from '../common/session-name.util';
 
 @Injectable()
 export class SessionsService {
@@ -25,6 +30,7 @@ export class SessionsService {
     private readonly dailyStatsService: DailyStatsService,
     private readonly streakService: StreaksService,
     private readonly notificationsService: NotificationsService,
+    private readonly leaderboardService: LeaderboardService,
   ) {}
 
   findAll() {
@@ -37,9 +43,12 @@ export class SessionsService {
       throw new NotFoundException();
     }
 
+    const sessionName = normalizeSessionName(dto.session_name);
     const session = this.sessionRepo.create({
       user: { id: userId },
       type: dto.type,
+      session_name: sessionName,
+      session_name_hash: hashSessionName(sessionName),
       planned_duration_minutes: dto.planned_minutes,
       actual_duration_minutes: 0,
       started_at: new Date(),
@@ -90,13 +99,23 @@ export class SessionsService {
     const saved = await this.sessionRepo.save(session);
 
     if (session.type === SessionType.POMODORO) {
-        await this.dailyStatsService.applyMinutes(
-          session.user.id,
-          session.started_at,
-          normalizeTimezone(session.user.time_zone),
-          Math.max(delta, 0),
-          1,
+      await this.dailyStatsService.applyMinutes(
+        session.user.id,
+        session.started_at,
+        normalizeTimezone(session.user.time_zone),
+        Math.max(delta, 0),
+        1,
+      );
+
+      try {
+        await this.leaderboardService.updateGlobalAllTime(session.user.id);
+        await this.leaderboardService.invalidateForUser(session.user.id);
+      } catch (err) {
+        this.logger.error(
+          `Leaderboard update failed for session ${sessionId}`,
+          err instanceof Error ? err.stack : String(err),
         );
+      }
 
       try {
         const streak = await this.streakService.getRecord(session.user.id);
@@ -134,9 +153,12 @@ export class SessionsService {
   }
 
   async create(dto: CreateSessionDto, userId: string) {
+    const sessionName = normalizeSessionName(dto.session_name);
     const session = this.sessionRepo.create({
       user: { id: userId },
       type: dto.type,
+      session_name: sessionName,
+      session_name_hash: hashSessionName(sessionName),
       planned_duration_minutes: dto.planned_minutes,
       actual_duration_minutes: 0,
       started_at: new Date(),
@@ -191,6 +213,8 @@ export class SessionsService {
       id: session.id,
       userId: session.user.id,
       type: session.type,
+      session_name: session.session_name ?? null,
+      session_name_hash: session.session_name_hash ?? null,
       planned_duration_minutes: session.planned_duration_minutes,
       actual_duration_minutes: session.actual_duration_minutes,
       started_at: session.started_at,

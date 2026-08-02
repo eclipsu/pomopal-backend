@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DailyStatsModule } from 'src/daily-stats/daily-stats.module';
 import { StreaksModule } from 'src/streaks/streaks.module';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { LeaderboardModule } from 'src/leaderboard/leaderboard.module';
 import { User } from 'src/entities/user.entity';
 
 @Module({
@@ -15,6 +16,7 @@ import { User } from 'src/entities/user.entity';
     DailyStatsModule,
     StreaksModule,
     NotificationsModule,
+    LeaderboardModule,
   ],
   controllers: [SessionsController],
   providers: [SessionsService],

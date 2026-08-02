@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.gitignore
+*.md
+*.tsbuildinfo
+tsconfig.build.tsbuildinfo
+.env
+.env.*
+!.env.example
+coverage
+storage/templates/*
+!storage/templates/.gitkeep
+logs
+*.log

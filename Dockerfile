@@ -8,9 +8,9 @@ RUN npm install
 
 COPY . .
 
-RUN npm run build
+RUN npm run build && test -f dist/main.js
 
-EXPOSE 3000
+EXPOSE 8000
 
 # Start app
 CMD ["node", "dist/main"]

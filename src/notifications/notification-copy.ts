@@ -14,10 +14,10 @@ export function streakAtRiskCopy(
     return {
       title: 'Streak is at Risk',
       body: pick([
-        `BROOOOOOOO! It's 11 PM. Your ${streak}-day streak is not doing okay.`,
-        `Your ${streak} day streak is dying, it will haunt you forever btw`,
+        `BROOOOOOOO! It's 11 PM on your last grace day. Your ${streak}-day streak is not doing okay.`,
+        `Your ${streak} day streak is dying — tonight is the last chance to save it.`,
         `Your ${streak} day streak just called me. It's sad because you abandoned it.`,
-        `Are we in the mood to start a new streak?`,
+        `Last grace day. Are we in the mood to start a new streak, or keep this ${streak}-day one?`,
       ]),
     };
   }
@@ -25,7 +25,7 @@ export function streakAtRiskCopy(
   return {
     title: 'Streak is at Risk',
     body: pick([
-      `${streak} day streak dying, it will haunt you forever btw`,
+      `${streak} day streak on grace — you've got a couple days. Don't waste them.`,
       `Who's going to carry the books and the ${streak} day streak, son?`,
       `Tell yourself the truth! That you've wasted enough time... so your ${streak} day streak doesn't die, ok?`,
       `My greatest pain in life is that ${streak} day streak will never be able to see it become a ${streak + 1} day streak.`,

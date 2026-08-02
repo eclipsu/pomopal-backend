@@ -4,12 +4,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DailyStat } from 'src/entities/daily-stat.entity';
-import { Session } from 'src/entities/sessions.entity';
+import { Session, SessionType } from 'src/entities/sessions.entity';
 import { Between, QueryFailedError, Repository } from 'typeorm';
 import { normalizeTimezone, toUserDate } from '../common/time';
 import { StreaksService } from 'src/streaks/streaks.service';
 import { User } from 'src/entities/user.entity';
 import { DailyStatDto } from './dto/daily-stat.dto.ts';
+import { hashSessionName } from '../common/session-name.util';
 
 function addDaysYmd(ymd: string, days: number): string {
   const [y, m, d] = ymd.split('-').map(Number);
@@ -43,6 +44,7 @@ export class DailyStatsService {
   constructor(
     @InjectRepository(DailyStat) private dailyStatRepo: Repository<DailyStat>,
     @InjectRepository(User) private userRepo: Repository<User>,
+    @InjectRepository(Session) private sessionRepo: Repository<Session>,
     private readonly streaks: StreaksService,
   ) {}
 
@@ -263,5 +265,51 @@ export class DailyStatsService {
       session.actual_duration_minutes ?? 0,
       1,
     );
+  }
+
+  /**
+   * Named pomodoro breakdown grouped by session_name_hash.
+   * Untitled sessions are omitted so the UI stays low-key.
+   */
+  async getSessionNameBreakdown(userId: string, limit = 20) {
+    const untitledHash = hashSessionName('Untitled Session');
+    const take = Math.min(Math.max(limit, 1), 50);
+
+    const rows = await this.sessionRepo
+      .createQueryBuilder('s')
+      .select('s.session_name_hash', 'session_name_hash')
+      .addSelect(
+        '(ARRAY_AGG(s.session_name ORDER BY s.started_at DESC))[1]',
+        'session_name',
+      )
+      .addSelect('COUNT(*)::int', 'session_count')
+      .addSelect(
+        'COALESCE(SUM(s.actual_duration_minutes), 0)::int',
+        'total_minutes',
+      )
+      .addSelect('MAX(s.started_at)', 'last_session_at')
+      .where('s.userId = :userId', { userId })
+      .andWhere('s.type = :type', { type: SessionType.POMODORO })
+      .andWhere('s.session_name_hash IS NOT NULL')
+      .andWhere('s.session_name_hash != :untitledHash', { untitledHash })
+      .groupBy('s.session_name_hash')
+      .orderBy('total_minutes', 'DESC')
+      .addOrderBy('session_count', 'DESC')
+      .limit(take)
+      .getRawMany<{
+        session_name_hash: string;
+        session_name: string;
+        session_count: string | number;
+        total_minutes: string | number;
+        last_session_at: string | Date;
+      }>();
+
+    return rows.map((r) => ({
+      session_name_hash: r.session_name_hash,
+      session_name: r.session_name || 'Untitled Session',
+      session_count: Number(r.session_count) || 0,
+      total_minutes: Number(r.total_minutes) || 0,
+      date: statDateKey(r.last_session_at),
+    }));
   }
 }

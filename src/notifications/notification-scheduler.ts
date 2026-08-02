@@ -13,15 +13,16 @@ import {
   normalizeTimezone,
   streakDateToYmd,
   todayInTz,
-  yesterdayInTz,
 } from '../common/time';
+import { STREAK_GRACE_DAYS } from '../streaks/streak.constants';
 
 // 9 PM = 3 hours before midnight
 // 11 PM = 1 hour before midnight
 const STREAK_NUDGE_HOURS = new Set([21, 23]);
 const COMEBACK_HOUR = 10;
 const MIN_SESSIONS_FOR_NUDGE = 5;
-const COMEBACK_DAYS = 3;
+/** Days since last focus before a comeback nudge (after grace has already ended). */
+const COMEBACK_DAYS = STREAK_GRACE_DAYS + 1;
 
 @Injectable()
 export class NotificationScheduler {
@@ -94,22 +95,31 @@ export class NotificationScheduler {
     if (!streak || streak.current_streak <= 0) return;
 
     const lastActive = streakDateToYmd(streak.last_active_date, tz);
-    const yesterday = yesterdayInTz(tz);
-    if (!lastActive || lastActive === today || lastActive !== yesterday) return;
+    if (!lastActive || lastActive === today) return;
+
+    const gap = daysBetweenYmd(lastActive, today);
+    // Only nudge while still inside the grace window (not focused today).
+    if (gap < 1 || gap > STREAK_GRACE_DAYS) return;
 
     const stat = await this.dailyStatRepo.findOne({
       where: { user: { id: userId }, date: today },
     });
     if (stat && stat.session_count > 0) return; // completed today, don't nag
 
-    const isLastChance = hour === 23;
+    const graceDaysRemaining = STREAK_GRACE_DAYS - gap;
+    const isLastChance = graceDaysRemaining === 0 && hour === 23;
     await this.notifications.notifyStreakAtRisk(
       userId,
       streak.current_streak,
       today,
       email,
       isLastChance,
-      { today },
+      {
+        today,
+        graceDays: STREAK_GRACE_DAYS,
+        graceDaysRemaining,
+        daysAway: gap,
+      },
     );
   }
   private async maybeDailyNudge(
