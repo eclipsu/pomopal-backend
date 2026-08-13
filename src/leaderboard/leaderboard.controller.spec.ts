@@ -13,6 +13,7 @@ describe('LeaderboardController', () => {
           provide: LeaderboardService,
           useValue: {
             getFriendLeaderboard: jest.fn(),
+            getGlobalWeekLeaderboard: jest.fn().mockResolvedValue([]),
             getGlobalAllTimeLeaderboard: jest.fn().mockResolvedValue([]),
           },
         },

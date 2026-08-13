@@ -20,6 +20,7 @@ import { StorageModule } from './storage/storage.module';
 import { SoundsModule } from './sounds/sounds.module';
 import { FontsModule } from './fonts/fonts.module';
 import { SpacesModule } from './spaces/spaces.module';
+import { PostsModule } from './posts/posts.module';
 import jwtConfig from './auth/config/jwt.config';
 
 @Module({
@@ -44,6 +45,7 @@ import jwtConfig from './auth/config/jwt.config';
     SoundsModule,
     FontsModule,
     SpacesModule,
+    PostsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

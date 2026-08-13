@@ -7,6 +7,8 @@ import { NotificationPreferences } from '../entities/notification-preferences.en
 import { User } from '../entities/user.entity';
 import { AdminNotificationTemplatesController } from './admin-notification-templates.controller';
 import { AdminNotificationTemplatesService } from './admin-notification-templates.service';
+import { AdminBlogImagesController } from './admin-blog-images.controller';
+import { AdminBlogImagesService } from './admin-blog-images.service';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminGuard } from '../auth/guards/admin/admin.guard';
@@ -29,7 +31,16 @@ import { StorageModule } from '../storage/storage.module';
     StreaksModule,
     StorageModule,
   ],
-  controllers: [AdminNotificationTemplatesController, AdminController],
-  providers: [AdminNotificationTemplatesService, AdminService, AdminGuard],
+  controllers: [
+    AdminNotificationTemplatesController,
+    AdminBlogImagesController,
+    AdminController,
+  ],
+  providers: [
+    AdminNotificationTemplatesService,
+    AdminBlogImagesService,
+    AdminService,
+    AdminGuard,
+  ],
 })
 export class AdminModule {}

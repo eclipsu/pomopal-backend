@@ -46,6 +46,7 @@ export function getMaxAudioBytes(): number {
   return MAX_AUDIO_BYTES;
 }
 const TEMPLATE_PREFIX = 'notification-templates/';
+const BLOG_PREFIX = 'blog/';
 const SPACE_BG_PREFIX = 'spaces/backgrounds/';
 const AVATAR_PREFIX = 'avatars/';
 const SOUND_BACKGROUND_PREFIX = 'sounds/background/';
@@ -54,6 +55,8 @@ const FONT_PREFIX = 'fonts/';
 const SPACE_BAKED_FONT_PREFIX = 'spaces/baked/';
 const TEMPLATE_KEY_PATTERN =
   /^notification-templates\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.webp$/i;
+const BLOG_KEY_PATTERN =
+  /^blog\/[a-z0-9][a-z0-9_-]{0,119}\.webp$/i;
 const SPACE_BG_KEY_PATTERN =
   /^spaces\/backgrounds\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(webp|gif)$/i;
 const AVATAR_KEY_PATTERN =
@@ -127,6 +130,10 @@ export class StorageService {
     return TEMPLATE_KEY_PATTERN.test(key);
   }
 
+  isValidBlogImageKey(key: string): boolean {
+    return BLOG_KEY_PATTERN.test(key);
+  }
+
   isValidSpaceBackgroundKey(key: string): boolean {
     return SPACE_BG_KEY_PATTERN.test(key);
   }
@@ -185,6 +192,34 @@ export class StorageService {
     } catch (err) {
       this.logger.warn(
         `S3 list failed (need s3:ListBucket): ${err instanceof Error ? err.message : err}`,
+      );
+      return [];
+    }
+  }
+
+  async listS3BlogKeys(): Promise<string[]> {
+    try {
+      const keys: string[] = [];
+      let continuationToken: string | undefined;
+      do {
+        const result = await this.client.send(
+          new ListObjectsV2Command({
+            Bucket: this.bucket,
+            Prefix: BLOG_PREFIX,
+            ContinuationToken: continuationToken,
+          }),
+        );
+        for (const item of result.Contents ?? []) {
+          if (item.Key && this.isValidBlogImageKey(item.Key)) {
+            keys.push(item.Key);
+          }
+        }
+        continuationToken = result.NextContinuationToken;
+      } while (continuationToken);
+      return keys;
+    } catch (err) {
+      this.logger.warn(
+        `S3 blog list failed (need s3:ListBucket): ${err instanceof Error ? err.message : err}`,
       );
       return [];
     }
@@ -500,6 +535,67 @@ export class StorageService {
   }
 
   /**
+   * Blog cover / in-post image. Stored as WebP under blog/{slug}.webp.
+   * `slug` is a URL-safe filename without extension (e.g. welcome-cover).
+   */
+  async saveBlogImage(
+    file: Express.Multer.File,
+    slug: string,
+  ): Promise<string> {
+    if (!ALLOWED_MIMES.has(file.mimetype)) {
+      throw new BadRequestException('Image must be JPEG, PNG, WebP, or GIF');
+    }
+    if (file.size > MAX_BYTES) {
+      throw new BadRequestException('Image must be 5 MB or smaller');
+    }
+    if (!file.buffer?.length) {
+      throw new BadRequestException('Image upload failed — try again');
+    }
+
+    const normalized = slug
+      .trim()
+      .toLowerCase()
+      .replace(/\.webp$/i, '')
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 120);
+    if (!normalized || !/^[a-z0-9]/.test(normalized)) {
+      throw new BadRequestException(
+        'Name must start with a letter or number (a-z, 0-9, -, _)',
+      );
+    }
+
+    const key = `${BLOG_PREFIX}${normalized}.webp`;
+    if (!this.isValidBlogImageKey(key)) {
+      throw new BadRequestException('Invalid blog image name');
+    }
+
+    const body = await sharp(file.buffer)
+      .rotate()
+      .resize({
+        width: 2400,
+        height: 1600,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: 85 })
+      .toBuffer();
+
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: 'image/webp',
+        CacheControl: 'public, max-age=31536000, immutable',
+      }),
+    );
+
+    this.logger.log(`Uploaded blog image to s3://${this.bucket}/${key}`);
+    return key;
+  }
+
+  /**
    * User space background. Stills are converted to WebP; GIFs are stored as-is
    * so animation is preserved.
    */
@@ -725,6 +821,7 @@ export class StorageService {
   private resolveKey(stored: string | null | undefined): string | null {
     if (!stored) return null;
     if (stored.startsWith(TEMPLATE_PREFIX)) return stored;
+    if (stored.startsWith(BLOG_PREFIX)) return stored;
     if (stored.startsWith(SPACE_BG_PREFIX)) return stored;
     if (stored.startsWith(AVATAR_PREFIX)) return stored;
     if (stored.startsWith('/storage/templates/')) {
@@ -744,6 +841,7 @@ export class StorageService {
   private keyFromUrlPath(pathname: string): string | null {
     const path = pathname.replace(/^\//, '').replace(/^(api\/)?media\//, '');
     if (path.startsWith(TEMPLATE_PREFIX)) return path;
+    if (path.startsWith(BLOG_PREFIX)) return path;
     if (path.startsWith(SPACE_BG_PREFIX)) return path;
     if (path.startsWith(AVATAR_PREFIX)) return path;
     if (path.startsWith('sounds/')) return path;

@@ -35,6 +35,7 @@ export class PrivacyService {
     if (dto.show_on_leaderboard !== undefined) {
       try {
         await this.leaderboardService.updateGlobalAllTime(userId);
+        await this.leaderboardService.updateGlobalWeek(userId);
         await this.leaderboardService.invalidateForUser(userId);
       } catch (err) {
         this.logger.warn(

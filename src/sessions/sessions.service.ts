@@ -109,6 +109,7 @@ export class SessionsService {
 
       try {
         await this.leaderboardService.updateGlobalAllTime(session.user.id);
+        await this.leaderboardService.updateGlobalWeek(session.user.id);
         await this.leaderboardService.invalidateForUser(session.user.id);
       } catch (err) {
         this.logger.error(
