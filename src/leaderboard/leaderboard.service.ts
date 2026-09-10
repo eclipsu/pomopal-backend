@@ -195,11 +195,12 @@ export class LeaderboardService {
           for (const entry of fromDb) {
             if (seen.has(entry.user_id)) continue;
             merged.push(entry);
-            if (merged.length >= GLOBAL_TOP_N) break;
           }
-          merged.forEach((e, i) => (e.rank = i + 1));
-          await this.seedGlobalWeek(merged);
-          return merged.slice(0, GLOBAL_TOP_N);
+          merged.sort((a, b) => b.focus_minutes - a.focus_minutes);
+          const top = merged.slice(0, GLOBAL_TOP_N);
+          top.forEach((e, i) => (e.rank = i + 1));
+          await this.seedGlobalWeek(top);
+          return top;
         }
       }
     } catch (err) {
@@ -237,11 +238,12 @@ export class LeaderboardService {
           for (const entry of fromDb) {
             if (seen.has(entry.user_id)) continue;
             merged.push(entry);
-            if (merged.length >= GLOBAL_TOP_N) break;
           }
-          merged.forEach((e, i) => (e.rank = i + 1));
-          await this.seedGlobalAllTime(merged);
-          return merged.slice(0, GLOBAL_TOP_N);
+          merged.sort((a, b) => b.focus_minutes - a.focus_minutes);
+          const top = merged.slice(0, GLOBAL_TOP_N);
+          top.forEach((e, i) => (e.rank = i + 1));
+          await this.seedGlobalAllTime(top);
+          return top;
         }
       }
     } catch (err) {
