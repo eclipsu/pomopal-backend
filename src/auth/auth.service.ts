@@ -48,6 +48,50 @@ export class AuthService {
     return this.login(userId);
   }
 
+  /**
+   * Cold-open bootstrap: validate access cookie, or refresh, then return profile
+   * in a single round trip so the SPA does not do profile → 401 → refresh → profile.
+   */
+  async resolveSession(accessToken?: string, refreshToken?: string) {
+    let userId: string | null = null;
+    let issuedAccess: string | null = null;
+    let issuedRefresh: string | null = null;
+
+    if (accessToken) {
+      try {
+        const payload = this.jwtService.verify<AuthJwtPayload>(accessToken);
+        userId = String(payload.sub);
+      } catch {
+        userId = null;
+      }
+    }
+
+    if (!userId && refreshToken) {
+      try {
+        const payload = this.jwtService.verify<AuthJwtPayload>(refreshToken, {
+          secret: this.configService.getOrThrow<string>('jwt.secretRefresh'),
+        });
+        userId = String(payload.sub);
+        const tokens = await this.login(userId);
+        issuedAccess = tokens.token;
+        issuedRefresh = tokens.refreshToken;
+      } catch {
+        throw new UnauthorizedException('Session expired');
+      }
+    }
+
+    if (!userId) {
+      throw new UnauthorizedException('Not authenticated');
+    }
+
+    const profile = await this.userService.findOne(userId);
+    return {
+      profile,
+      accessToken: issuedAccess,
+      refreshToken: issuedRefresh,
+    };
+  }
+
   async validateGoogleUser(googleUser: CreateUserDto) {
     let user = await this.userService.findByEmail(googleUser.email);
     if (!user) user = await this.userService.create(googleUser);

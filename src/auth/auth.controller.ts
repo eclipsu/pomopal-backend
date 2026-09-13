@@ -22,6 +22,9 @@ import { GoogleAuthGuard } from './guards/google-auth/google-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth/jwt-auth.guard';
 import { ConfigService } from '@nestjs/config';
 
+const SESSION_HINT = 'pomopal_session';
+const isProd = process.env.NODE_ENV === 'production';
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -29,22 +32,45 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  private setSessionHint(res: Response) {
+    // Readable by JS so the SPA can paint a logged-in shell before /auth/session returns.
+    res.cookie(SESSION_HINT, '1', {
+      httpOnly: false,
+      secure: isProd,
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+  }
+
+  private clearSessionHint(res: Response) {
+    res.clearCookie(SESSION_HINT, {
+      path: '/',
+      httpOnly: false,
+      secure: isProd,
+      sameSite: 'lax',
+    });
+  }
+
   private setTokenCookies(res: Response, token: string, refreshToken?: string) {
+    // Keep the access cookie for a day so cold opens usually skip refresh.
     res.cookie('access_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProd,
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
+      maxAge: 24 * 60 * 60 * 1000,
     });
 
     if (refreshToken) {
       res.cookie('refresh_token', refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProd,
         sameSite: 'lax',
         maxAge: 30 * 24 * 60 * 60 * 1000,
       });
     }
+
+    this.setSessionHint(res);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -55,6 +81,7 @@ export class AuthController {
     this.setTokenCookies(res, token, refreshToken);
     return { id };
   }
+
   @Post('logout')
   logout(@Req() req: Request, @Res() res: Response) {
     const cookiesToClear = ['access_token', 'refresh_token'];
@@ -63,14 +90,42 @@ export class AuthController {
       res.clearCookie(name, {
         path: '/',
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProd,
         sameSite: 'lax',
       });
     });
+    this.clearSessionHint(res);
 
     return res.status(200).json({
       message: 'Logged out and cookies cleared',
     });
+  }
+
+  /**
+   * One-shot cold open: access cookie, or refresh + new access, then profile.
+   * Replaces the SPA's profile → 401 → refresh → profile chain.
+   */
+  @HttpCode(HttpStatus.OK)
+  @Get('session')
+  async session(
+    @Req() req: Request & { cookies?: Record<string, string> },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const access = req.cookies?.['access_token'];
+    const refresh = req.cookies?.['refresh_token'];
+    const result = await this.authService.resolveSession(access, refresh);
+
+    if (result.accessToken) {
+      this.setTokenCookies(
+        res,
+        result.accessToken,
+        result.refreshToken ?? undefined,
+      );
+    } else {
+      this.setSessionHint(res);
+    }
+
+    return result.profile;
   }
 
   /**
