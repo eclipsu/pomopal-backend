@@ -30,28 +30,39 @@ export class GiphyService {
     return data
       .map((item: any) => {
         const images = item?.images || {};
-        const gif =
+        const animated =
           images.original?.url ||
           images.downsized?.url ||
           images.fixed_height?.url ||
           null;
+        // Prefer still frames so space backgrounds don't keep animating.
+        const still =
+          images.original_still?.url ||
+          images.downsized_still?.url ||
+          images.fixed_height_still?.url ||
+          images.fixed_width_still?.url ||
+          null;
         const preview =
+          still ||
+          images.fixed_height_small_still?.url ||
+          images.fixed_width_small_still?.url ||
           images.fixed_height_small?.url ||
           images.preview_gif?.url ||
-          images.fixed_width_small?.url ||
-          images.downsized_small?.url ||
-          gif;
+          animated;
         const tiny =
+          still ||
+          images.fixed_width_small_still?.url ||
+          images.fixed_height_small_still?.url ||
           images.fixed_width_small?.url ||
-          images.fixed_height_small?.url ||
           preview;
-        if (!gif) return null;
+        if (!animated && !still) return null;
         return {
           id: String(item.id),
           title: String(item.title || item.slug || 'GIF'),
-          url: String(gif),
-          previewUrl: String(preview || gif),
-          tinyUrl: String(tiny || preview || gif),
+          // `url` is what we paint on the timer / space — keep it still.
+          url: String(still || animated),
+          previewUrl: String(preview || still || animated),
+          tinyUrl: String(tiny || preview || still || animated),
         } as GifResult;
       })
       .filter(Boolean);

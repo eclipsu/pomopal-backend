@@ -9,16 +9,15 @@ interface AuthRequest extends Request {
 }
 
 @Controller('leaderboard')
-@UseGuards(JwtAuthGuard)
 export class LeaderboardController {
   constructor(private readonly leaderboardService: LeaderboardService) {}
 
   /**
    * GET /leaderboard?period=week
-   * Get friend leaderboard for a given period
-   * period: today | week | alltime (default: week)
+   * Friend leaderboard (auth required).
    */
   @Get()
+  @UseGuards(JwtAuthGuard)
   async getLeaderboard(
     @Req() req: AuthRequest,
     @Query('period') period: LeaderboardPeriod = 'week',
@@ -30,13 +29,13 @@ export class LeaderboardController {
     );
   }
 
-  /** GET /leaderboard/global/week — top 5 global focus, last 7 days */
+  /** GET /leaderboard/global/week — public top 5, last 7 days */
   @Get('global/week')
   async getGlobalWeek() {
     return this.leaderboardService.getGlobalWeekLeaderboard();
   }
 
-  /** GET /leaderboard/global/alltime — top 5 global focus all-time */
+  /** GET /leaderboard/global/alltime — public top 5 all-time */
   @Get('global/alltime')
   async getGlobalAllTime() {
     return this.leaderboardService.getGlobalAllTimeLeaderboard();
