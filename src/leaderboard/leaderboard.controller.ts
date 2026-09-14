@@ -3,9 +3,14 @@ import { Request } from 'express';
 import { LeaderboardService } from './leaderboard.service';
 import type { LeaderboardPeriod } from './leaderboard.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from 'src/auth/guards/optional-jwt/optional-jwt-auth.guard';
 
 interface AuthRequest extends Request {
   user: { sub: string };
+}
+
+interface OptionalAuthRequest extends Request {
+  user?: { sub: string };
 }
 
 @Controller('leaderboard')
@@ -29,15 +34,17 @@ export class LeaderboardController {
     );
   }
 
-  /** GET /leaderboard/global/week — public top 5, last 7 days */
+  /** GET /leaderboard/global/week — public top 5; appends you when logged in */
   @Get('global/week')
-  async getGlobalWeek() {
-    return this.leaderboardService.getGlobalWeekLeaderboard();
+  @UseGuards(OptionalJwtAuthGuard)
+  async getGlobalWeek(@Req() req: OptionalAuthRequest) {
+    return this.leaderboardService.getGlobalWeekLeaderboard(req.user?.sub);
   }
 
-  /** GET /leaderboard/global/alltime — public top 5 all-time */
+  /** GET /leaderboard/global/alltime — public top 5; appends you when logged in */
   @Get('global/alltime')
-  async getGlobalAllTime() {
-    return this.leaderboardService.getGlobalAllTimeLeaderboard();
+  @UseGuards(OptionalJwtAuthGuard)
+  async getGlobalAllTime(@Req() req: OptionalAuthRequest) {
+    return this.leaderboardService.getGlobalAllTimeLeaderboard(req.user?.sub);
   }
 }

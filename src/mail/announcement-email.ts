@@ -10,6 +10,11 @@ import {
   StreakWeekDay,
 } from './streak-update-email';
 import {
+  buildLeaderboardEmailHtml,
+  buildLeaderboardEmailText,
+  LeaderboardEmailRow,
+} from './leaderboard-email';
+import {
   fetchUrlAsInlineImage,
   InlineEmailImage,
   NOTIFICATION_IMAGE_CID,
@@ -37,8 +42,10 @@ export interface SendAnnouncementOptions {
   cta?: NotificationCardCta;
   preheader?: string;
   /** Streak email layout (logo, CTA, optional weekly progress). */
-  variant?: 'card' | 'streak_update';
+  variant?: 'card' | 'streak_update' | 'leaderboard';
   weekDays?: StreakWeekDay[];
+  leaderboardRows?: LeaderboardEmailRow[];
+  boardTitle?: string;
   footer?: string;
 }
 
@@ -69,6 +76,7 @@ export async function sendAnnouncementEmail(
     : imageUrl;
 
   const useStreak = opts.variant === 'streak_update';
+  const useLeaderboard = opts.variant === 'leaderboard';
 
   let html: string;
   let text: string;
@@ -87,6 +95,21 @@ export async function sendAnnouncementEmail(
     };
     html = buildStreakUpdateEmailHtml(streakCard);
     text = buildStreakUpdateEmailText(streakCard);
+  } else if (useLeaderboard) {
+    const boardCard = {
+      title: opts.title,
+      body: opts.body ?? undefined,
+      imageUrl: resolvedImageUrl,
+      imageAlt: opts.imageAlt,
+      ctaLabel: opts.cta?.label,
+      ctaUrl: opts.cta?.url,
+      rows: opts.leaderboardRows ?? [],
+      boardTitle: opts.boardTitle,
+      footer: opts.footer,
+      preheader: opts.preheader,
+    };
+    html = buildLeaderboardEmailHtml(boardCard);
+    text = buildLeaderboardEmailText(boardCard);
   } else {
     const card = {
       title: opts.title,
@@ -121,3 +144,4 @@ export async function sendAnnouncementEmail(
     attachments,
   });
 }
+

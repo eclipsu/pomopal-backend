@@ -90,6 +90,81 @@ export function focusCompleteCopy(): { title: string; body: string } {
   };
 }
 
+export function dailyGoalCopy(
+  minutes: number,
+  goal: number,
+): { title: string; body: string } {
+  return {
+    title: 'Daily goal cleared',
+    body: pick([
+      `${minutes}/${goal} minutes. That's the bar. You cleared it.`,
+      `Daily goal: done. ${minutes} minutes in the bank.`,
+      `Goal hit (${goal} min). Tomorrow's you owes you one.`,
+    ]),
+  };
+}
+
+export function focusMilestoneCopy(
+  totalMinutes: number,
+): { title: string; body: string } {
+  const hours = Math.round(totalMinutes / 60);
+  return {
+    title: 'Focus milestone',
+    body: pick([
+      `${totalMinutes} lifetime minutes (~${hours}h). That's real volume.`,
+      `You crossed ${totalMinutes} minutes all-time. Keep stacking.`,
+      `${totalMinutes} minutes focused. The tomato is proud.`,
+    ]),
+  };
+}
+
+export function weeklyRankCopy(args: {
+  weekMinutes: number;
+  weekSessions: number;
+  rank?: number | null;
+}): { title: string; body: string } {
+  const { weekMinutes, weekSessions, rank } = args;
+  const rankBit =
+    rank != null ? ` Global week rank: #${rank}.` : '';
+  return {
+    title: 'Your week in focus',
+    body: pick([
+      `${weekMinutes} minutes across ${weekSessions} sessions.${rankBit}`,
+      `Week closed: ${weekMinutes} focused minutes.${rankBit}`,
+      `${weekSessions} sessions, ${weekMinutes} minutes. That's a week.${rankBit}`,
+    ]),
+  };
+}
+
+export function rankPassedCopy(args: {
+  otherName: string;
+  direction: 'passed_you' | 'you_passed';
+  minutes: number;
+}): { title: string; body: string } {
+  const { otherName, direction, minutes } = args;
+  if (direction === 'you_passed') {
+    return {
+      title: 'You moved up',
+      body: `You just passed ${otherName} on this week's leaderboard (${minutes} min).`,
+    };
+  }
+  return {
+    title: 'Someone passed you',
+    body: `${otherName} just passed you on this week's leaderboard (${minutes} min).`,
+  };
+}
+
+export function globalTopCopy(rank: number): { title: string; body: string } {
+  return {
+    title: 'Global top 5',
+    body: pick([
+      `You're #${rank} on the global weekly leaderboard. Defend it.`,
+      `Top 5. Rank #${rank}. The board sees you.`,
+      `#${rank} worldwide this week. One more pomodoro keeps you there.`,
+    ]),
+  };
+}
+
 export function dedupeKey(
   type: NotificationType,
   userId: string,

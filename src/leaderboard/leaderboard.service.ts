@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import Redis from 'ioredis';
 import { DailyStat } from '../entities/daily-stat.entity';
 import { Friendship } from '../entities/friendship.entity';
@@ -172,9 +172,13 @@ export class LeaderboardService {
     }
   }
 
-  /** Top 5 last 7 days — Redis first, DB fallback (+ seed Redis). */
-  async getGlobalWeekLeaderboard(): Promise<LeaderboardEntryDto[]> {
+  /** Top N last 7 days — Redis first, DB fallback (+ seed Redis). */
+  async getGlobalWeekLeaderboard(
+    viewerUserId?: string | null,
+  ): Promise<LeaderboardEntryDto[]> {
     const weekKey = globalLast7dKey(this.getTodayDate());
+
+    let top: LeaderboardEntryDto[] = [];
 
     try {
       const raw = await this.redis.zrevrange(
@@ -186,9 +190,8 @@ export class LeaderboardService {
       if (raw.length > 0) {
         const hydrated = await this.hydrateGlobal(raw);
         if (hydrated.length >= GLOBAL_TOP_N) {
-          return hydrated.slice(0, GLOBAL_TOP_N);
-        }
-        if (hydrated.length > 0) {
+          top = hydrated.slice(0, GLOBAL_TOP_N);
+        } else if (hydrated.length > 0) {
           const fromDb = await this.buildGlobalWeekFromDb();
           const seen = new Set(hydrated.map((e) => e.user_id));
           const merged = [...hydrated];
@@ -197,10 +200,9 @@ export class LeaderboardService {
             merged.push(entry);
           }
           merged.sort((a, b) => b.focus_minutes - a.focus_minutes);
-          const top = merged.slice(0, GLOBAL_TOP_N);
+          top = merged.slice(0, GLOBAL_TOP_N);
           top.forEach((e, i) => (e.rank = i + 1));
           await this.seedGlobalWeek(top);
-          return top;
         }
       }
     } catch (err) {
@@ -209,15 +211,23 @@ export class LeaderboardService {
       );
     }
 
-    const fromDb = await this.buildGlobalWeekFromDb();
-    if (fromDb.length > 0) {
-      await this.seedGlobalWeek(fromDb);
+    if (top.length === 0) {
+      const fromDb = await this.buildGlobalWeekFromDb();
+      if (fromDb.length > 0) {
+        await this.seedGlobalWeek(fromDb);
+      }
+      top = fromDb;
     }
-    return fromDb;
+
+    return this.appendViewerIfAbsent(top, viewerUserId, 'week');
   }
 
-  /** Top 5 all-time — Redis first, DB fallback (+ seed Redis). */
-  async getGlobalAllTimeLeaderboard(): Promise<LeaderboardEntryDto[]> {
+  /** Top N all-time — Redis first, DB fallback (+ seed Redis). */
+  async getGlobalAllTimeLeaderboard(
+    viewerUserId?: string | null,
+  ): Promise<LeaderboardEntryDto[]> {
+    let top: LeaderboardEntryDto[] = [];
+
     try {
       const raw = await this.redis.zrevrange(
         GLOBAL_ALLTIME_KEY,
@@ -228,9 +238,8 @@ export class LeaderboardService {
       if (raw.length > 0) {
         const hydrated = await this.hydrateGlobal(raw);
         if (hydrated.length >= GLOBAL_TOP_N) {
-          return hydrated.slice(0, GLOBAL_TOP_N);
-        }
-        if (hydrated.length > 0) {
+          top = hydrated.slice(0, GLOBAL_TOP_N);
+        } else if (hydrated.length > 0) {
           // Top up if privacy filters removed some Redis members.
           const fromDb = await this.buildGlobalFromDb();
           const seen = new Set(hydrated.map((e) => e.user_id));
@@ -240,10 +249,9 @@ export class LeaderboardService {
             merged.push(entry);
           }
           merged.sort((a, b) => b.focus_minutes - a.focus_minutes);
-          const top = merged.slice(0, GLOBAL_TOP_N);
+          top = merged.slice(0, GLOBAL_TOP_N);
           top.forEach((e, i) => (e.rank = i + 1));
           await this.seedGlobalAllTime(top);
-          return top;
         }
       }
     } catch (err) {
@@ -252,11 +260,15 @@ export class LeaderboardService {
       );
     }
 
-    const fromDb = await this.buildGlobalFromDb();
-    if (fromDb.length > 0) {
-      await this.seedGlobalAllTime(fromDb);
+    if (top.length === 0) {
+      const fromDb = await this.buildGlobalFromDb();
+      if (fromDb.length > 0) {
+        await this.seedGlobalAllTime(fromDb);
+      }
+      top = fromDb;
     }
-    return fromDb;
+
+    return this.appendViewerIfAbsent(top, viewerUserId, 'alltime');
   }
 
   private async seedGlobalAllTime(
@@ -498,6 +510,181 @@ export class LeaderboardService {
     entries.forEach((e, i) => (e.rank = i + 1));
 
     return entries;
+  }
+
+  /** 1-based rank on global week ZSET, or null if not ranked. */
+  async getGlobalWeekRank(userId: string): Promise<number | null> {
+    const weekKey = globalLast7dKey(this.getTodayDate());
+    try {
+      const rank = await this.redis.zrevrank(weekKey, userId);
+      return rank == null ? null : rank + 1;
+    } catch {
+      return null;
+    }
+  }
+
+  async getGlobalWeekScore(userId: string): Promise<number> {
+    const weekKey = globalLast7dKey(this.getTodayDate());
+    try {
+      const score = await this.redis.zscore(weekKey, userId);
+      return score == null ? 0 : Number(score);
+    } catch {
+      return 0;
+    }
+  }
+
+  async getGlobalAllTimeRank(userId: string): Promise<number | null> {
+    try {
+      const rank = await this.redis.zrevrank(GLOBAL_ALLTIME_KEY, userId);
+      return rank == null ? null : rank + 1;
+    } catch {
+      return null;
+    }
+  }
+
+  async getGlobalAllTimeScore(userId: string): Promise<number> {
+    try {
+      const score = await this.redis.zscore(GLOBAL_ALLTIME_KEY, userId);
+      return score == null ? 0 : Number(score);
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * If viewer is outside the top N, append their real rank/minutes
+   * (e.g. top 5 then #15 you). Always appends when authenticated and not listed.
+   */
+  async appendViewerIfAbsent(
+    entries: LeaderboardEntryDto[],
+    viewerUserId?: string | null,
+    period: 'week' | 'alltime' = 'week',
+  ): Promise<LeaderboardEntryDto[]> {
+    if (!viewerUserId) return entries;
+    if (entries.some((e) => e.user_id === viewerUserId)) return entries;
+
+    const user = await this.userRepo.findOne({
+      where: { id: viewerUserId },
+      select: ['id', 'name', 'username', 'avatar_url', 'all_time_focus_minutes'],
+    });
+    if (!user) return entries;
+
+    let rank: number | null;
+    let minutes: number;
+
+    if (period === 'week') {
+      rank = await this.getGlobalWeekRank(viewerUserId);
+      minutes = await this.getGlobalWeekScore(viewerUserId);
+      if (minutes <= 0) {
+        minutes = await this.weekMinutesFromDb(viewerUserId);
+      }
+      if (rank == null && minutes > 0) {
+        rank = await this.estimateWeekRank(minutes);
+      }
+    } else {
+      rank = await this.getGlobalAllTimeRank(viewerUserId);
+      minutes =
+        (await this.getGlobalAllTimeScore(viewerUserId)) ||
+        (user.all_time_focus_minutes ?? 0);
+      if (rank == null && minutes > 0) {
+        rank = await this.estimateAllTimeRank(minutes);
+      }
+    }
+
+    // Still show the viewer even with 0 minutes / unknown rank.
+    const resolvedRank =
+      rank ?? Math.max(entries.length, GLOBAL_TOP_N) + 1;
+
+    return [
+      ...entries,
+      {
+        rank: resolvedRank,
+        user_id: viewerUserId,
+        name: user.name,
+        username: user.username ?? null,
+        avatar_url: user.avatar_url ?? null,
+        focus_minutes: minutes,
+      },
+    ];
+  }
+
+  private async weekMinutesFromDb(userId: string): Promise<number> {
+    const { startDate, endDate } = this.getLast7DaysRange();
+    const row = await this.dailyStatRepo
+      .createQueryBuilder('d')
+      .select('SUM(d.total_focus_minutes)', 'total')
+      .where('d.userId = :uid', { uid: userId })
+      .andWhere('d.date >= :start', { start: startDate })
+      .andWhere('d.date <= :end', { end: endDate })
+      .getRawOne<{ total: string | null }>();
+    return parseInt(row?.total ?? '0', 10) || 0;
+  }
+
+  /** 1-based rank among users with more week minutes (DB fallback). */
+  private async estimateWeekRank(minutes: number): Promise<number> {
+    const { startDate, endDate } = this.getLast7DaysRange();
+    const above = await this.dailyStatRepo
+      .createQueryBuilder('d')
+      .select('d.userId', 'user_id')
+      .addSelect('SUM(d.total_focus_minutes)', 'total')
+      .where('d.date >= :start', { start: startDate })
+      .andWhere('d.date <= :end', { end: endDate })
+      .groupBy('d.userId')
+      .having('SUM(d.total_focus_minutes) > :minutes', { minutes })
+      .getRawMany();
+    return above.length + 1;
+  }
+
+  private async estimateAllTimeRank(minutes: number): Promise<number> {
+    const count = await this.userRepo
+      .createQueryBuilder('u')
+      .where('u.all_time_focus_minutes > :minutes', { minutes })
+      .getCount();
+    return count + 1;
+  }
+
+  /**
+   * Users whose week score sat in (minutesBefore, minutesAfter] —
+   * i.e. this user just passed them on the global week board.
+   */
+  async usersPassedOnWeek(
+    actorId: string,
+    minutesBefore: number,
+    minutesAfter: number,
+  ): Promise<Array<{ userId: string; name: string; minutes: number }>> {
+    if (minutesAfter <= minutesBefore) return [];
+    const weekKey = globalLast7dKey(this.getTodayDate());
+    try {
+      const raw = await this.redis.zrangebyscore(
+        weekKey,
+        `(${minutesBefore}`,
+        minutesAfter,
+        'WITHSCORES',
+      );
+      const ids: string[] = [];
+      const scores = new Map<string, number>();
+      for (let i = 0; i < raw.length; i += 2) {
+        const id = raw[i];
+        if (id === actorId) continue;
+        ids.push(id);
+        scores.set(id, Number(raw[i + 1]));
+      }
+      if (ids.length === 0) return [];
+      const users = await this.userRepo.find({
+        where: { id: In(ids) },
+        select: ['id', 'name', 'username'],
+      });
+      return users.map((u) => ({
+        userId: u.id,
+        name: (u.name?.trim() || u.username || 'Someone').split(/\s+/)[0],
+        minutes: scores.get(u.id) ?? 0,
+      }));
+    } catch (err) {
+      this.logger.warn(
+        `usersPassedOnWeek failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return [];
+    }
   }
 
   private getTodayDate(): string {

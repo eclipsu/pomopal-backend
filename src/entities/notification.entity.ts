@@ -16,7 +16,28 @@ export type NotificationType =
   | 'streak_milestone'
   | 'daily_nudge'
   | 'comeback'
-  | 'focus_complete';
+  | 'focus_complete'
+  | 'daily_goal'
+  | 'focus_milestone'
+  | 'weekly_rank'
+  | 'rank_passed'
+  | 'global_top';
+
+/** All types shown in admin template filters / create form. */
+export const NOTIFICATION_TYPE_VALUES = [
+  'announcement',
+  'streak_update',
+  'streak_at_risk',
+  'streak_milestone',
+  'daily_nudge',
+  'comeback',
+  'focus_complete',
+  'daily_goal',
+  'focus_milestone',
+  'weekly_rank',
+  'rank_passed',
+  'global_top',
+] as const satisfies readonly NotificationType[];
 
 @Entity('notifications')
 export class Notification {

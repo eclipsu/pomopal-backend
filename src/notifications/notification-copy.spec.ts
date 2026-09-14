@@ -21,7 +21,7 @@ describe('notification-copy', () => {
 
   it('includes streak count in at-risk copy', () => {
     const { title, body } = streakAtRiskCopy(12);
-    expect(title).toBe('Streak is at Risk');
+    expect(title).toBe('Keep your streak going?');
     expect(body).toContain('12');
     expect(body.length).toBeGreaterThan(10);
   });

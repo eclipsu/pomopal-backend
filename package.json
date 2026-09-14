@@ -20,11 +20,13 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "script:send-announcement": "ts-node -r tsconfig-paths/register scripts/send-announcement.ts",
     "script:preview-notification-card": "ts-node -r tsconfig-paths/register scripts/preview-notification-card.ts",
-    "script:preview-streak-update": "ts-node -r tsconfig-paths/register scripts/preview-streak-update.ts"
+    "script:preview-streak-update": "ts-node -r tsconfig-paths/register scripts/preview-streak-update.ts",
+    "script:preview-leaderboard": "ts-node -r tsconfig-paths/register scripts/preview-leaderboard.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
     "@aws-sdk/s3-request-presigner": "^3.1084.0",
+    "@nestjs/bullmq": "^12.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
@@ -38,6 +40,7 @@
     "@nestjs/websockets": "^11.1.19",
     "@types/passport-local": "^1.0.38",
     "bcrypt": "^6.0.0",
+    "bullmq": "^6.3.5",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
     "cookie-parser": "^1.4.7",

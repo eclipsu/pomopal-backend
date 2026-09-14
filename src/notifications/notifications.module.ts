@@ -10,9 +10,16 @@ import { DailyStat } from '../entities/daily-stat.entity';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
-import { NotificationScheduler } from './notification-scheduler';
 import { TemplatePickerService } from './template-picker.service';
 import { StreaksModule } from '../streaks/streaks.module';
+import { QueueModule } from '../queue/queue.module';
+import { LeaderboardModule } from '../leaderboard/leaderboard.module';
+import { NotificationStatsService } from './notification-stats.service';
+import { NotificationQueueService } from './notification-queue.service';
+import { NotificationScheduleRunner } from './notification-schedule.runner';
+import { NotificationScheduleProcessor } from './notification-schedule.processor';
+import { NotificationEventsProcessor } from './notification-events.processor';
+import { NotificationEmailProcessor } from './notification-email.processor';
 
 @Module({
   imports: [
@@ -27,13 +34,20 @@ import { StreaksModule } from '../streaks/streaks.module';
     ]),
     MailModule,
     StreaksModule,
+    QueueModule,
+    LeaderboardModule,
   ],
   controllers: [NotificationsController],
   providers: [
     NotificationsService,
-    NotificationScheduler,
     TemplatePickerService,
+    NotificationStatsService,
+    NotificationQueueService,
+    NotificationScheduleRunner,
+    NotificationScheduleProcessor,
+    NotificationEventsProcessor,
+    NotificationEmailProcessor,
   ],
-  exports: [NotificationsService, TemplatePickerService],
+  exports: [NotificationsService, TemplatePickerService, NotificationStatsService],
 })
 export class NotificationsModule {}

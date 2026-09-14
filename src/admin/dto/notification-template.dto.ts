@@ -8,16 +8,9 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import type { NotificationType } from '../../entities/notification.entity';
+import { NOTIFICATION_TYPE_VALUES } from '../../entities/notification.entity';
 
-const NOTIFICATION_TYPES = [
-  'announcement',
-  'streak_update',
-  'streak_at_risk',
-  'streak_milestone',
-  'daily_nudge',
-  'comeback',
-  'focus_complete',
-] as const satisfies readonly NotificationType[];
+const NOTIFICATION_TYPES = NOTIFICATION_TYPE_VALUES;
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
   if (value === undefined || value === null || value === '') return {};

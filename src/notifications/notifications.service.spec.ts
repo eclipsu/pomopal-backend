@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+
+jest.mock('./notification-queue.service', () => ({
+  NotificationQueueService: class NotificationQueueService {},
+}));
+
 import { NotificationsService } from './notifications.service';
 import { Notification } from '../entities/notification.entity';
 import { NotificationPreferences } from '../entities/notification-preferences.entity';
@@ -8,6 +13,9 @@ import { MailService } from '../mail/mail.service';
 import { TemplatePickerService } from './template-picker.service';
 import { StorageService } from '../storage/storage.service';
 import { User } from '../entities/user.entity';
+import { NotificationStatsService } from './notification-stats.service';
+import { NotificationQueueService } from './notification-queue.service';
+import { LeaderboardService } from '../leaderboard/leaderboard.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -54,9 +62,40 @@ describe('NotificationsService', () => {
     objectPublicUrl: jest.fn((key: string) => `https://cdn.example/${key}`),
   };
 
+  const stats = {
+    todayMinutes: jest.fn().mockResolvedValue(0),
+    todaySessionCount: jest.fn().mockResolvedValue(0),
+    allTimeMinutes: jest.fn().mockResolvedValue(0),
+    weekMinutes: jest.fn().mockResolvedValue(0),
+    weekSessionCount: jest.fn().mockResolvedValue(0),
+  };
+
+  const queue = {
+    enqueuePomodoroCompleted: jest.fn().mockRejectedValue(new Error('no queue')),
+    enqueueSendEmail: jest.fn().mockRejectedValue(new Error('no queue')),
+    enqueueEvaluateUser: jest.fn(),
+  };
+
+  const leaderboard = {
+    usersPassedOnWeek: jest.fn().mockResolvedValue([]),
+    getGlobalWeekRank: jest.fn().mockResolvedValue(null),
+    getGlobalWeekScore: jest.fn().mockResolvedValue(0),
+    getGlobalWeekLeaderboard: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     dailyStatRepo.find.mockResolvedValue([]);
+    queue.enqueuePomodoroCompleted.mockRejectedValue(new Error('no queue'));
+    queue.enqueueSendEmail.mockRejectedValue(new Error('no queue'));
+    stats.todaySessionCount.mockResolvedValue(0);
+    stats.todayMinutes.mockResolvedValue(0);
+    leaderboard.usersPassedOnWeek.mockResolvedValue([]);
+    leaderboard.getGlobalWeekRank.mockResolvedValue(null);
+    leaderboard.getGlobalWeekScore.mockResolvedValue(0);
+    leaderboard.getGlobalWeekLeaderboard.mockResolvedValue([]);
+    stats.weekMinutes.mockResolvedValue(0);
+    stats.weekSessionCount.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -71,6 +110,9 @@ describe('NotificationsService', () => {
         { provide: MailService, useValue: mailService },
         { provide: TemplatePickerService, useValue: templatePicker },
         { provide: StorageService, useValue: storage },
+        { provide: NotificationStatsService, useValue: stats },
+        { provide: NotificationQueueService, useValue: queue },
+        { provide: LeaderboardService, useValue: leaderboard },
       ],
     }).compile();
 
@@ -129,6 +171,9 @@ describe('NotificationsService', () => {
     prefsRepo.findOneBy.mockResolvedValue({
       user_id: 'user-1',
       streak_updates: true,
+      goal_updates: true,
+      league_updates: true,
+      daily_goal_minutes: 25,
     });
     notificationRepo.findOne.mockResolvedValue(null);
     notificationRepo.save.mockImplementation(async (row) => ({
@@ -155,6 +200,9 @@ describe('NotificationsService', () => {
     prefsRepo.findOneBy.mockResolvedValue({
       user_id: 'user-1',
       streak_updates: true,
+      goal_updates: true,
+      league_updates: true,
+      daily_goal_minutes: 25,
     });
     notificationRepo.findOne.mockResolvedValue(null);
     notificationRepo.save.mockImplementation(async (row) => ({

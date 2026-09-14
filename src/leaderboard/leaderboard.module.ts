@@ -7,13 +7,16 @@ import { UserPrivacy } from 'src/entities/user-privacy.entity';
 import { LeaderboardService } from './leaderboard.service';
 import { LeaderboardController } from './leaderboard.controller';
 import { PresenceModule } from '../presence/presence.module';
+import { AuthModule } from '../auth/auth.module';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt/optional-jwt-auth.guard';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([DailyStat, Friendship, User, UserPrivacy]),
     PresenceModule,
+    AuthModule,
   ],
-  providers: [LeaderboardService],
+  providers: [LeaderboardService, OptionalJwtAuthGuard],
   controllers: [LeaderboardController],
   exports: [LeaderboardService],
 })

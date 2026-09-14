@@ -21,6 +21,7 @@ import { SoundsModule } from './sounds/sounds.module';
 import { FontsModule } from './fonts/fonts.module';
 import { SpacesModule } from './spaces/spaces.module';
 import { PostsModule } from './posts/posts.module';
+import { QueueModule } from './queue/queue.module';
 import jwtConfig from './auth/config/jwt.config';
 
 @Module({
@@ -39,6 +40,7 @@ import jwtConfig from './auth/config/jwt.config';
     MailModule,
     PresenceModule,
     LeaderboardModule,
+    QueueModule,
     NotificationsModule,
     AdminModule,
     StorageModule,

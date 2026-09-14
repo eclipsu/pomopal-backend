@@ -1,4 +1,5 @@
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateNotificationPreferencesDto {
   @IsOptional()
@@ -16,4 +17,19 @@ export class UpdateNotificationPreferencesDto {
   @IsOptional()
   @IsBoolean()
   product_announcements?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  goal_updates?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  league_updates?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(600)
+  daily_goal_minutes?: number;
 }

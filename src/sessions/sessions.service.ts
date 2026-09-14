@@ -12,6 +12,7 @@ import { SessionResponseDto } from './dto/response-dto';
 import { DailyStatsService } from 'src/daily-stats/daily-stats.service';
 import { StreaksService } from 'src/streaks/streaks.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
+import { NotificationStatsService } from 'src/notifications/notification-stats.service';
 import { LeaderboardService } from 'src/leaderboard/leaderboard.service';
 import { User } from 'src/entities/user.entity';
 import { normalizeTimezone, toUserDate } from '../common/time';
@@ -30,6 +31,7 @@ export class SessionsService {
     private readonly dailyStatsService: DailyStatsService,
     private readonly streakService: StreaksService,
     private readonly notificationsService: NotificationsService,
+    private readonly notificationStats: NotificationStatsService,
     private readonly leaderboardService: LeaderboardService,
   ) {}
 
@@ -99,11 +101,21 @@ export class SessionsService {
     const saved = await this.sessionRepo.save(session);
 
     if (session.type === SessionType.POMODORO) {
+      const tz = normalizeTimezone(session.user.time_zone);
+      const today = toUserDate(session.started_at, tz);
+      const creditedMinutes = Math.max(delta, 0);
+      const allTimeMinutesBefore =
+        await this.notificationStats.allTimeMinutes(session.user.id);
+      const weekMinutesBefore = await this.notificationStats.weekMinutes(
+        session.user.id,
+        today,
+      );
+
       await this.dailyStatsService.applyMinutes(
         session.user.id,
         session.started_at,
-        normalizeTimezone(session.user.time_zone),
-        Math.max(delta, 0),
+        tz,
+        creditedMinutes,
         1,
       );
 
@@ -126,6 +138,11 @@ export class SessionsService {
           streak?.current_streak ?? 0,
           session.user.time_zone,
           session.user.email,
+          {
+            creditedMinutes,
+            allTimeMinutesBefore,
+            weekMinutesBefore,
+          },
         );
       } catch (err) {
         this.logger.error(

@@ -21,4 +21,14 @@ export class NotificationPreferences {
 
   @Column({ default: true })
   product_announcements!: boolean;
+
+  @Column({ default: true })
+  goal_updates!: boolean;
+
+  @Column({ default: true })
+  league_updates!: boolean;
+
+  /** Daily focus goal in minutes (personal reward loop). */
+  @Column({ type: 'int', default: 25 })
+  daily_goal_minutes!: number;
 }
