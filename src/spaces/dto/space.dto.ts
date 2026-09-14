@@ -78,6 +78,12 @@ export class SpaceLayoutDto {
   @MaxLength(64)
   backgroundGifId?: string | null;
 
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(80)
+  backgroundOverlayOpacity?: number;
+
   @IsString()
   @MaxLength(80)
   timerFont!: string;
@@ -249,6 +255,10 @@ export function sanitizeLayout(input: SpaceLayoutDto) {
     backgroundGifId: input.backgroundGifId
       ? String(input.backgroundGifId).slice(0, 64)
       : null,
+    backgroundOverlayOpacity: Math.min(
+      80,
+      Math.max(0, Math.round(input.backgroundOverlayOpacity ?? 0)),
+    ),
     timerFont: font,
     timerFontSize: Math.min(160, Math.max(32, Math.round(input.timerFontSize))),
     timerColor: hexOk(input.timerColor) ? input.timerColor : '#ffffff',

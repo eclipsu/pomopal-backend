@@ -38,6 +38,7 @@ export interface SpaceLayout {
   backgroundGifUrl: string | null;
   backgroundGifPreviewUrl: string | null;
   backgroundGifId: string | null;
+  backgroundOverlayOpacity: number;
   timerFont: string;
   timerFontSize: number;
   timerColor: string;
