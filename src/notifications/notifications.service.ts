@@ -7,6 +7,7 @@ import {
 } from '../entities/notification.entity';
 import { NotificationPreferences } from '../entities/notification-preferences.entity';
 import { DailyStat } from '../entities/daily-stat.entity';
+import { User } from '../entities/user.entity';
 import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import {
   APP_LINK,
@@ -24,12 +25,14 @@ import { TemplatePickerService } from './template-picker.service';
 import { renderTemplate } from './template-render';
 import { StorageService } from '../storage/storage.service';
 import { resolveInlineEmailImage } from '../mail/email-inline-image';
+import { stripHtml } from '../mail/notification-card-email';
 import {
   addDaysYmd,
   buildWeekDaysFromStats,
   StreakWeekDay,
 } from '../mail/streak-update-email';
 import { todayInTz } from '../common/time';
+import { greetingName } from '../common/greeting-name';
 
 interface CreateParams {
   userId: string;
@@ -65,6 +68,8 @@ export class NotificationsService {
     private readonly prefsRepo: Repository<NotificationPreferences>,
     @InjectRepository(DailyStat)
     private readonly dailyStatRepo: Repository<DailyStat>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly mailService: MailService,
     private readonly templatePicker: TemplatePickerService,
     private readonly storage: StorageService,
@@ -282,6 +287,10 @@ export class NotificationsService {
     sendEmail?: boolean;
     context: Record<string, unknown>;
   }) {
+    const context = await this.withGreetingContext(
+      params.userId,
+      params.context,
+    );
     let title: string;
     let body: string;
     let imageUrl = this.fallbackImageForType(params.type);
@@ -291,8 +300,8 @@ export class NotificationsService {
     if (params.templateId) {
       const template = await this.templatePicker.findById(params.templateId);
       if (!template) throw new NotFoundException('Template not found');
-      title = renderTemplate(template.title, params.context);
-      body = renderTemplate(template.body, params.context);
+      title = renderTemplate(template.title, context);
+      body = renderTemplate(template.body, context);
       imageUrl = template.image_url ?? imageUrl;
       source = 'template';
       templateName = template.name;
@@ -302,11 +311,11 @@ export class NotificationsService {
       );
       const template = await this.templatePicker.pickTemplate(
         params.type,
-        params.context,
+        context,
       );
       if (template) {
-        title = renderTemplate(template.title, params.context);
-        body = renderTemplate(template.body, params.context);
+        title = renderTemplate(template.title, context);
+        body = renderTemplate(template.body, context);
         imageUrl = template.image_url ?? imageUrl;
         source = 'template';
         templateName = template.name;
@@ -315,11 +324,13 @@ export class NotificationsService {
           'No eligible template for this type and context',
         );
       } else {
-        const copy = this.fallbackCopyForType(params.type, params.context);
+        const copy = this.fallbackCopyForType(params.type, context);
         title = copy.title;
         body = copy.body;
       }
     }
+
+    ({ title, body } = this.normalizeCopy(params.type, title, body));
 
     const dedupeKey = `test:${params.type}:${params.userId}:${Date.now()}`;
     const notification = await this.notificationRepo.save(
@@ -339,9 +350,7 @@ export class NotificationsService {
         type: params.type,
         userId: params.userId,
         todayYmd:
-          typeof params.context.today === 'string'
-            ? params.context.today
-            : undefined,
+          typeof context.today === 'string' ? context.today : undefined,
       });
       emailSent = this.mailService.isConfigured();
     }
@@ -457,6 +466,10 @@ export class NotificationsService {
     fallbackImage: string;
     email?: string;
   }): Promise<Notification | null> {
+    const context = await this.withGreetingContext(
+      params.userId,
+      params.context,
+    );
     let title: string;
     let body: string;
     let imageUrl = params.fallbackImage;
@@ -467,12 +480,12 @@ export class NotificationsService {
 
     const template = await this.templatePicker.pickTemplate(
       params.type,
-      params.context,
+      context,
     );
 
     if (template) {
-      title = renderTemplate(template.title, params.context);
-      body = renderTemplate(template.body, params.context);
+      title = renderTemplate(template.title, context);
+      body = renderTemplate(template.body, context);
       imageUrl = template.image_url ?? params.fallbackImage;
     } else if (templatesConfigured) {
       this.logger.debug(
@@ -484,6 +497,8 @@ export class NotificationsService {
       title = copy.title;
       body = copy.body;
     }
+
+    ({ title, body } = this.normalizeCopy(params.type, title, body));
 
     const created = await this.createIfNew({
       userId: params.userId,
@@ -498,13 +513,42 @@ export class NotificationsService {
         type: params.type,
         userId: params.userId,
         todayYmd:
-          typeof params.context.today === 'string'
-            ? params.context.today
-            : undefined,
+          typeof context.today === 'string' ? context.today : undefined,
       });
     }
 
     return created;
+  }
+
+  /** {{username}} → first name, else username handle. */
+  private async withGreetingContext(
+    userId: string,
+    context: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    if (typeof context.username === 'string' && context.username.trim()) {
+      return context;
+    }
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['name', 'username'],
+    });
+    if (!user) return context;
+    return { ...context, username: greetingName(user) };
+  }
+
+  /** Streak emails use plain text — strip rich-editor font tags. */
+  private normalizeCopy(
+    type: NotificationType,
+    title: string,
+    body: string,
+  ): { title: string; body: string } {
+    if (!this.isStreakUpdateType(type) && type !== 'daily_nudge' && type !== 'comeback') {
+      return { title, body };
+    }
+    return {
+      title: stripHtml(title) || title,
+      body: stripHtml(body) || body,
+    };
   }
 
   private isStreakUpdateType(type?: NotificationType): boolean {

@@ -7,6 +7,7 @@ import { DailyStat } from '../entities/daily-stat.entity';
 import { MailService } from '../mail/mail.service';
 import { TemplatePickerService } from './template-picker.service';
 import { StorageService } from '../storage/storage.service';
+import { User } from '../entities/user.entity';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -28,6 +29,13 @@ describe('NotificationsService', () => {
 
   const dailyStatRepo = {
     find: jest.fn().mockResolvedValue([]),
+  };
+
+  const userRepo = {
+    findOne: jest.fn().mockResolvedValue({
+      name: 'Rajeev Shrestha',
+      username: 'rajeev2',
+    }),
   };
 
   const mailService = {
@@ -59,6 +67,7 @@ describe('NotificationsService', () => {
           useValue: prefsRepo,
         },
         { provide: getRepositoryToken(DailyStat), useValue: dailyStatRepo },
+        { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: MailService, useValue: mailService },
         { provide: TemplatePickerService, useValue: templatePicker },
         { provide: StorageService, useValue: storage },

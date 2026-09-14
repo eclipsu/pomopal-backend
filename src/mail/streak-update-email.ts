@@ -1,3 +1,5 @@
+import { stripHtml } from './notification-card-email';
+
 export type StreakWeekDay = {
   /** Short label e.g. Su, Mo */
   label: string;
@@ -92,12 +94,15 @@ function buildWeekProgressHtml(days: StreakWeekDay[]): string {
 /** Duo-themed streak email: flat white canvas, no card chrome. */
 export function buildStreakUpdateEmailHtml(card: StreakUpdateCard): string {
   const brand = escapeHtml(card.brandName ?? 'pomopal');
-  const title = escapeHtml(card.title);
-  const body = card.body ? escapeHtml(card.body) : '';
+  const title = escapeHtml(stripHtml(card.title));
+  // Rich-text templates often inject <font face="pomopalFont"> — strip to plain text.
+  const bodyPlain = card.body ? stripHtml(card.body) : '';
+  const body = bodyPlain ? escapeHtml(bodyPlain).replace(/\n/g, '<br>') : '';
   const footer =
     card.footer ?? 'Keep your streak alive with a pomodoro!';
   const preheader =
-    card.preheader ?? `${card.title} — ${stripPlain(footer)}`.slice(0, 100);
+    card.preheader ??
+    `${stripHtml(card.title)} — ${stripPlain(footer)}`.slice(0, 100);
   const ctaLabel = escapeHtml(card.ctaLabel ?? 'START A POMODORO');
   const ctaUrl = card.ctaUrl ?? 'https://pomopal.lol';
 

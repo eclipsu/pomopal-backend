@@ -72,6 +72,17 @@ describe('streak-update-email', () => {
     expect(html).toContain('Keep your streak alive with a pomodoro!');
   });
 
+  it('strips rich-text font tags to plain body text', () => {
+    const html = buildStreakUpdateEmailHtml({
+      title: 'LAST CALL, Rajeev',
+      body: '<font face="pomopalFont"><span>Your 7 day streak has minutes left.</span></font>',
+      weekDays: [{ label: 'Mo', completed: false, isToday: true }],
+    });
+    expect(html).toContain('Your 7 day streak has minutes left.');
+    expect(html).not.toContain('pomopalFont');
+    expect(html).not.toContain('&lt;font');
+  });
+
   it('builds plain text summary', () => {
     const text = buildStreakUpdateEmailText({
       title: 'Streak Milestone',

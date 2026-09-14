@@ -19,6 +19,7 @@ import { TestSendNotificationDto } from './dto/test-send.dto';
 import { ReviveStreakDto } from './dto/revive-streak.dto';
 import { BroadcastAnnouncementDto } from './dto/announcement.dto';
 import { PreviewNotificationDto } from './dto/preview-notification.dto';
+import { greetingName } from '../common/greeting-name';
 
 const BATCH_SIZE = 200;
 const EMAIL_DELAY_MS = 100;
@@ -91,7 +92,7 @@ export class AdminService {
         isLastChance: dto.isLastChance ?? false,
         completedSessions: 10,
         today: new Date().toISOString().slice(0, 10),
-        username: user.username ?? '',
+        username: greetingName(user),
       },
     });
   }
@@ -115,7 +116,7 @@ export class AdminService {
       imageKey: dto.image_key,
       context: {
         streak: eligibility.current_streak,
-        username: user.username ?? '',
+        username: greetingName(user),
       },
       fallbackTitle: 'Streak restored',
       fallbackBody: `We restored your ${eligibility.current_streak}-day streak. Thank you for using Pomopal — let's keep it going!`,
@@ -156,7 +157,7 @@ export class AdminService {
 
     const today = new Date().toISOString().slice(0, 10);
     const allUsers = await this.users.find({
-      select: ['id', 'email', 'username'],
+      select: ['id', 'email', 'name', 'username'],
     });
     if (!allUsers.length) {
       return { inserted: 0, skipped: 0, emailed: 0, emailFailed: 0, dryRun: dto.dryRun ?? false };
@@ -165,7 +166,7 @@ export class AdminService {
     if (dto.dryRun) {
       const sample = this.renderMessageContent(raw, {
         today,
-        username: 'username',
+        username: 'friend',
       });
       return {
         dryRun: true,
@@ -208,7 +209,7 @@ export class AdminService {
           u.id,
           this.renderMessageContent(raw, {
             today,
-            username: u.username ?? '',
+            username: greetingName(u),
           }),
         ]),
       );
@@ -259,7 +260,7 @@ export class AdminService {
       daysAway: dto.daysAway ?? 5,
       isLastChance: dto.isLastChance ?? false,
       today: new Date().toISOString().slice(0, 10),
-      username: 'username',
+      username: 'friend',
     };
 
     if (dto.userId) {
@@ -267,9 +268,9 @@ export class AdminService {
       context.streak = eligibility.current_streak;
       const user = await this.users.findOne({
         where: { id: dto.userId },
-        select: ['username'],
+        select: ['name', 'username'],
       });
-      if (user?.username) context.username = user.username;
+      if (user) context.username = greetingName(user);
     }
 
     const hasContent =
