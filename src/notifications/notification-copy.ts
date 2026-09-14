@@ -6,13 +6,24 @@ const pick = <T>(items: T[]): T =>
 
 export const APP_LINK = 'https://pomopal.lol';
 
+export function streakUpdateCopy(streak: number): { title: string; body: string } {
+  return {
+    title: 'Keep your streak going?',
+    body: pick([
+      `Your streak is on grace — one pomodoro today keeps it alive.`,
+      `You're at ${streak} days. One pomodoro today keeps the fire going.`,
+      `${streak}-day streak on grace. Don't let today be the miss.`,
+    ]),
+  };
+}
+
 export function streakAtRiskCopy(
   streak: number,
   isLastChance = false,
 ): { title: string; body: string } {
   if (isLastChance) {
     return {
-      title: 'Streak is at Risk',
+      title: 'Keep your streak going?',
       body: pick([
         `BROOOOOOOO! It's 11 PM on your last grace day. Your ${streak}-day streak is not doing okay.`,
         `Your ${streak} day streak is dying — tonight is the last chance to save it.`,
@@ -23,7 +34,7 @@ export function streakAtRiskCopy(
   }
 
   return {
-    title: 'Streak is at Risk',
+    title: 'Keep your streak going?',
     body: pick([
       `${streak} day streak on grace — you've got a couple days. Don't waste them.`,
       `Who's going to carry the books and the ${streak} day streak, son?`,

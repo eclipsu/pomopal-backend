@@ -11,6 +11,7 @@ import { User } from './user.entity';
 
 export type NotificationType =
   | 'announcement'
+  | 'streak_update'
   | 'streak_at_risk'
   | 'streak_milestone'
   | 'daily_nudge'
