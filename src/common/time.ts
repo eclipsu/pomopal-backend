@@ -52,11 +52,6 @@ export function localHourInTz(tz: string): number {
   return Number(format(toZonedTime(new Date(), zone), 'H', { timeZone: zone }));
 }
 
-/** Current weekday in the user's timezone: 0 = Sunday … 6 = Saturday. */
-export function localWeekdayInTz(tz: string): number {
-  return toZonedTime(new Date(), normalizeTimezone(tz)).getDay();
-}
-
 export function daysBetweenYmd(from: string, to: string): number {
   const [fy, fm, fd] = from.split('-').map(Number);
   const [ty, tm, td] = to.split('-').map(Number);

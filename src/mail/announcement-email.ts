@@ -5,11 +5,6 @@ import {
   NotificationCardCta,
 } from './notification-card-email';
 import {
-  buildStreakUpdateEmailHtml,
-  buildStreakUpdateEmailText,
-  StreakWeekDay,
-} from './streak-update-email';
-import {
   fetchUrlAsInlineImage,
   InlineEmailImage,
   NOTIFICATION_IMAGE_CID,
@@ -36,10 +31,6 @@ export interface SendAnnouncementOptions {
   inlineImage?: InlineEmailImage;
   cta?: NotificationCardCta;
   preheader?: string;
-  /** Duolingo-style weekly streak progress layout */
-  variant?: 'card' | 'streak_update';
-  weekDays?: StreakWeekDay[];
-  footer?: string;
 }
 
 export async function sendAnnouncementEmail(
@@ -64,42 +55,14 @@ export async function sendAnnouncementEmail(
     if (inlineImage) imageUrl = undefined;
   }
 
-  const resolvedImageUrl = inlineImage
-    ? `cid:${NOTIFICATION_IMAGE_CID}`
-    : imageUrl;
-
-  const useStreak =
-    opts.variant === 'streak_update' && (opts.weekDays?.length ?? 0) > 0;
-
-  let html: string;
-  let text: string;
-
-  if (useStreak) {
-    const streakCard = {
-      title: opts.title,
-      body: opts.body ?? undefined,
-      imageUrl: resolvedImageUrl,
-      imageAlt: opts.imageAlt,
-      ctaLabel: opts.cta?.label,
-      ctaUrl: opts.cta?.url,
-      weekDays: opts.weekDays!,
-      footer: opts.footer,
-      preheader: opts.preheader,
-    };
-    html = buildStreakUpdateEmailHtml(streakCard);
-    text = buildStreakUpdateEmailText(streakCard);
-  } else {
-    const card = {
-      title: opts.title,
-      body: opts.body ?? '',
-      imageUrl: resolvedImageUrl,
-      imageAlt: opts.imageAlt,
-      cta: opts.cta,
-      preheader: opts.preheader,
-    };
-    html = buildNotificationCardHtml(card);
-    text = buildNotificationCardText(card);
-  }
+  const card = {
+    title: opts.title,
+    body: opts.body ?? '',
+    imageUrl: inlineImage ? `cid:${NOTIFICATION_IMAGE_CID}` : imageUrl,
+    imageAlt: opts.imageAlt,
+    cta: opts.cta,
+    preheader: opts.preheader,
+  };
 
   const attachments = inlineImage
     ? [
@@ -117,8 +80,8 @@ export async function sendAnnouncementEmail(
     from: `"${smtp.fromName}" <${smtp.from}>`,
     to: opts.to,
     subject: opts.title,
-    html,
-    text,
+    html: buildNotificationCardHtml(card),
+    text: buildNotificationCardText(card),
     attachments,
   });
 }

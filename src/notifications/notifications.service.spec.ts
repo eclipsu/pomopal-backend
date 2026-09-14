@@ -3,7 +3,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotificationsService } from './notifications.service';
 import { Notification } from '../entities/notification.entity';
 import { NotificationPreferences } from '../entities/notification-preferences.entity';
-import { DailyStat } from '../entities/daily-stat.entity';
 import { MailService } from '../mail/mail.service';
 import { TemplatePickerService } from './template-picker.service';
 import { StorageService } from '../storage/storage.service';
@@ -26,10 +25,6 @@ describe('NotificationsService', () => {
     create: jest.fn((row) => row),
   };
 
-  const dailyStatRepo = {
-    find: jest.fn().mockResolvedValue([]),
-  };
-
   const mailService = {
     sendAnnouncement: jest.fn(),
     isConfigured: jest.fn().mockReturnValue(true),
@@ -43,12 +38,10 @@ describe('NotificationsService', () => {
   const storage = {
     resolveImageUrl: jest.fn().mockImplementation(async (url: string) => url),
     getObjectBuffer: jest.fn().mockResolvedValue(null),
-    objectPublicUrl: jest.fn((key: string) => `https://cdn.example/${key}`),
   };
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    dailyStatRepo.find.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -58,7 +51,6 @@ describe('NotificationsService', () => {
           provide: getRepositoryToken(NotificationPreferences),
           useValue: prefsRepo,
         },
-        { provide: getRepositoryToken(DailyStat), useValue: dailyStatRepo },
         { provide: MailService, useValue: mailService },
         { provide: TemplatePickerService, useValue: templatePicker },
         { provide: StorageService, useValue: storage },
@@ -168,12 +160,6 @@ describe('NotificationsService', () => {
         title: 'Streak Milestone',
         body: expect.any(String),
         imageAlt: 'Streak Milestone',
-        variant: 'streak_update',
-        weekDays: expect.any(Array),
-        cta: expect.objectContaining({
-          label: 'START A POMODORO',
-          url: 'https://pomopal.lol',
-        }),
       }),
     );
   });
@@ -203,8 +189,6 @@ describe('NotificationsService', () => {
 
     expect(mailService.sendAnnouncement).toHaveBeenCalledWith(
       expect.objectContaining({
-        variant: 'streak_update',
-        weekDays: expect.any(Array),
         inlineImage: expect.objectContaining({
           cid: 'pomopal-notification-image',
           content: Buffer.from('img'),
