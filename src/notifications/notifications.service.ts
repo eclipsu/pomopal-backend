@@ -296,6 +296,7 @@ export class NotificationsService {
     let imageUrl = this.fallbackImageForType(params.type);
     let source: 'template' | 'fallback' = 'fallback';
     let templateName: string | null = null;
+    let showProgress = this.defaultShowProgress(params.type);
 
     if (params.templateId) {
       const template = await this.templatePicker.findById(params.templateId);
@@ -305,6 +306,7 @@ export class NotificationsService {
       imageUrl = template.image_url ?? imageUrl;
       source = 'template';
       templateName = template.name;
+      showProgress = this.templateShowProgress(template);
     } else {
       const templatesConfigured = await this.templatePicker.hasActiveTemplates(
         params.type,
@@ -319,6 +321,7 @@ export class NotificationsService {
         imageUrl = template.image_url ?? imageUrl;
         source = 'template';
         templateName = template.name;
+        showProgress = this.templateShowProgress(template);
       } else if (templatesConfigured) {
         throw new NotFoundException(
           'No eligible template for this type and context',
@@ -351,6 +354,7 @@ export class NotificationsService {
         userId: params.userId,
         todayYmd:
           typeof context.today === 'string' ? context.today : undefined,
+        showProgress,
       });
       emailSent = this.mailService.isConfigured();
     }
@@ -473,6 +477,7 @@ export class NotificationsService {
     let title: string;
     let body: string;
     let imageUrl = params.fallbackImage;
+    let showProgress = this.defaultShowProgress(params.type);
 
     const templatesConfigured = await this.templatePicker.hasActiveTemplates(
       params.type,
@@ -487,6 +492,7 @@ export class NotificationsService {
       title = renderTemplate(template.title, context);
       body = renderTemplate(template.body, context);
       imageUrl = template.image_url ?? params.fallbackImage;
+      showProgress = this.templateShowProgress(template);
     } else if (templatesConfigured) {
       this.logger.debug(
         `Skipped ${params.type} for ${params.userId}: no eligible template`,
@@ -514,6 +520,7 @@ export class NotificationsService {
         userId: params.userId,
         todayYmd:
           typeof context.today === 'string' ? context.today : undefined,
+        showProgress,
       });
     }
 
@@ -549,6 +556,18 @@ export class NotificationsService {
       title: stripHtml(title) || title,
       body: stripHtml(body) || body,
     };
+  }
+
+  private defaultShowProgress(type: NotificationType): boolean {
+    return this.isStreakUpdateType(type);
+  }
+
+  private templateShowProgress(template: {
+    eligibility_rules?: Record<string, unknown> | null;
+  }): boolean {
+    const rules = template.eligibility_rules ?? {};
+    if (typeof rules.showProgress === 'boolean') return rules.showProgress;
+    return true;
   }
 
   private isStreakUpdateType(type?: NotificationType): boolean {
@@ -596,6 +615,7 @@ export class NotificationsService {
       type?: NotificationType;
       userId?: string;
       todayYmd?: string;
+      showProgress?: boolean;
     },
   ): Promise<void> {
     if (!this.mailService.isConfigured()) {
@@ -610,8 +630,9 @@ export class NotificationsService {
       );
 
       const streakUpdate = this.isStreakUpdateType(meta?.type);
-      let weekDays: StreakWeekDay[] | undefined;
-      if (streakUpdate && meta?.userId) {
+      const includeProgress = meta?.showProgress !== false;
+      let weekDays: StreakWeekDay[] = [];
+      if (streakUpdate && includeProgress && meta?.userId) {
         const today =
           meta.todayYmd ?? new Date().toISOString().slice(0, 10);
         weekDays = await this.weekDaysForUser(meta.userId, today);
@@ -624,7 +645,7 @@ export class NotificationsService {
         inlineImage,
         imageUrl,
         imageAlt: title,
-        ...(streakUpdate && weekDays?.length
+        ...(streakUpdate
           ? {
               variant: 'streak_update' as const,
               weekDays,

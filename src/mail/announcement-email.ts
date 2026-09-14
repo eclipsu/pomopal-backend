@@ -36,7 +36,7 @@ export interface SendAnnouncementOptions {
   inlineImage?: InlineEmailImage;
   cta?: NotificationCardCta;
   preheader?: string;
-  /** Duolingo-style weekly streak progress layout */
+  /** Streak email layout (logo, CTA, optional weekly progress). */
   variant?: 'card' | 'streak_update';
   weekDays?: StreakWeekDay[];
   footer?: string;
@@ -68,8 +68,7 @@ export async function sendAnnouncementEmail(
     ? `cid:${NOTIFICATION_IMAGE_CID}`
     : imageUrl;
 
-  const useStreak =
-    opts.variant === 'streak_update' && (opts.weekDays?.length ?? 0) > 0;
+  const useStreak = opts.variant === 'streak_update';
 
   let html: string;
   let text: string;
@@ -82,7 +81,7 @@ export async function sendAnnouncementEmail(
       imageAlt: opts.imageAlt,
       ctaLabel: opts.cta?.label,
       ctaUrl: opts.cta?.url,
-      weekDays: opts.weekDays!,
+      weekDays: opts.weekDays ?? [],
       footer: opts.footer,
       preheader: opts.preheader,
     };
