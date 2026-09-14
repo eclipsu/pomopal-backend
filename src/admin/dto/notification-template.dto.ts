@@ -11,6 +11,7 @@ import type { NotificationType } from '../../entities/notification.entity';
 
 const NOTIFICATION_TYPES = [
   'announcement',
+  'streak_update',
   'streak_at_risk',
   'streak_milestone',
   'daily_nudge',

@@ -1,13 +1,15 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository, IsNull } from 'typeorm';
+import { QueryFailedError, Repository, IsNull, Between } from 'typeorm';
 import {
   Notification,
   NotificationType,
 } from '../entities/notification.entity';
 import { NotificationPreferences } from '../entities/notification-preferences.entity';
+import { DailyStat } from '../entities/daily-stat.entity';
 import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import {
+  APP_LINK,
   STREAK_MILESTONES,
   comebackCopy,
   dailyNudgeCopy,
@@ -15,12 +17,19 @@ import {
   focusCompleteCopy,
   streakAtRiskCopy,
   streakMilestoneCopy,
+  streakUpdateCopy,
 } from './notification-copy';
 import { MailService } from '../mail/mail.service';
 import { TemplatePickerService } from './template-picker.service';
 import { renderTemplate } from './template-render';
 import { StorageService } from '../storage/storage.service';
 import { resolveInlineEmailImage } from '../mail/email-inline-image';
+import {
+  addDaysYmd,
+  buildWeekDaysFromStats,
+  StreakWeekDay,
+} from '../mail/streak-update-email';
+import { todayInTz } from '../common/time';
 
 interface CreateParams {
   userId: string;
@@ -54,6 +63,8 @@ export class NotificationsService {
     private readonly notificationRepo: Repository<Notification>,
     @InjectRepository(NotificationPreferences)
     private readonly prefsRepo: Repository<NotificationPreferences>,
+    @InjectRepository(DailyStat)
+    private readonly dailyStatRepo: Repository<DailyStat>,
     private readonly mailService: MailService,
     private readonly templatePicker: TemplatePickerService,
     private readonly storage: StorageService,
@@ -138,7 +149,7 @@ export class NotificationsService {
     userId: string,
     sessionId: string,
     currentStreak: number,
-    _userTimeZone: string,
+    userTimeZone: string,
     email?: string,
   ): Promise<void> {
     const prefs = await this.ensurePreferences(userId);
@@ -148,7 +159,10 @@ export class NotificationsService {
         await this.notifyWithTemplate({
           userId,
           type: 'streak_milestone',
-          context: { streak: currentStreak },
+          context: {
+            streak: currentStreak,
+            today: todayInTz(userTimeZone),
+          },
           dedupeKey: dedupeKey(
             'streak_milestone',
             userId,
@@ -162,6 +176,31 @@ export class NotificationsService {
     }
   }
 
+  async notifyStreakUpdate(
+    userId: string,
+    currentStreak: number,
+    today: string,
+    email?: string,
+    extraContext: Record<string, unknown> = {},
+  ): Promise<void> {
+    const prefs = await this.ensurePreferences(userId);
+    if (!prefs.streak_updates) return;
+
+    await this.notifyWithTemplate({
+      userId,
+      type: 'streak_update',
+      context: {
+        streak: currentStreak,
+        today,
+        ...extraContext,
+      },
+      dedupeKey: dedupeKey('streak_update', userId, today),
+      fallback: () => streakUpdateCopy(currentStreak),
+      fallbackImage: IMAGES.super,
+      email,
+    });
+  }
+
   async notifyStreakAtRisk(
     userId: string,
     currentStreak: number,
@@ -173,18 +212,19 @@ export class NotificationsService {
     const prefs = await this.ensurePreferences(userId);
     if (!prefs.streak_nudges) return;
 
+    // Temporarily use streak_update templates/copy instead of streak_at_risk.
     const suffix = isLastChance ? `${today}:last` : `${today}:early`;
     await this.notifyWithTemplate({
       userId,
-      type: 'streak_at_risk',
+      type: 'streak_update',
       context: {
         streak: currentStreak,
         isLastChance,
         today,
         ...extraContext,
       },
-      dedupeKey: dedupeKey('streak_at_risk', userId, suffix),
-      fallback: () => streakAtRiskCopy(currentStreak, isLastChance),
+      dedupeKey: dedupeKey('streak_update', userId, suffix),
+      fallback: () => streakUpdateCopy(currentStreak),
       fallbackImage: IMAGES.mad,
       email,
     });
@@ -295,7 +335,14 @@ export class NotificationsService {
 
     let emailSent = false;
     if (params.sendEmail !== false) {
-      await this.sendNudgeEmail(params.email, title, body, imageUrl);
+      await this.sendNudgeEmail(params.email, title, body, imageUrl, {
+        type: params.type,
+        userId: params.userId,
+        todayYmd:
+          typeof params.context.today === 'string'
+            ? params.context.today
+            : undefined,
+      });
       emailSent = this.mailService.isConfigured();
     }
 
@@ -361,6 +408,8 @@ export class NotificationsService {
 
   private fallbackImageForType(type: NotificationType): string {
     switch (type) {
+      case 'streak_update':
+        return IMAGES.super;
       case 'streak_at_risk':
         return IMAGES.mad;
       case 'streak_milestone':
@@ -382,6 +431,8 @@ export class NotificationsService {
     const isLastChance = Boolean(context.isLastChance);
 
     switch (type) {
+      case 'streak_update':
+        return streakUpdateCopy(streak);
       case 'streak_at_risk':
         return streakAtRiskCopy(streak, isLastChance);
       case 'streak_milestone':
@@ -443,10 +494,53 @@ export class NotificationsService {
     });
 
     if (created && params.email) {
-      await this.sendNudgeEmail(params.email, title, body, imageUrl);
+      await this.sendNudgeEmail(params.email, title, body, imageUrl, {
+        type: params.type,
+        userId: params.userId,
+        todayYmd:
+          typeof params.context.today === 'string'
+            ? params.context.today
+            : undefined,
+      });
     }
 
     return created;
+  }
+
+  private isStreakUpdateType(type?: NotificationType): boolean {
+    return (
+      type === 'streak_update' ||
+      type === 'streak_at_risk' ||
+      type === 'streak_milestone'
+    );
+  }
+
+  private async weekDaysForUser(
+    userId: string,
+    todayYmd: string,
+  ): Promise<StreakWeekDay[]> {
+    const from = addDaysYmd(todayYmd, -6);
+    const rows = await this.dailyStatRepo.find({
+      where: {
+        user: { id: userId },
+        date: Between(from, todayYmd),
+      },
+      select: ['date', 'session_count'],
+    });
+    const completed = rows
+      .filter((r) => r.session_count > 0)
+      .map((r) => r.date);
+    return buildWeekDaysFromStats(todayYmd, completed);
+  }
+
+  private streakEmailFooter(type?: NotificationType): string {
+    if (type === 'streak_milestone') {
+      return "You're on fire — keep it going tomorrow!";
+    }
+    if (type === 'streak_update') {
+      return 'Keep your streak alive with a pomodoro!';
+    }
+    return 'Save your streak with a pomodoro!';
   }
 
   private async sendNudgeEmail(
@@ -454,6 +548,11 @@ export class NotificationsService {
     title: string,
     body: string,
     imageSource?: string,
+    meta?: {
+      type?: NotificationType;
+      userId?: string;
+      todayYmd?: string;
+    },
   ): Promise<void> {
     if (!this.mailService.isConfigured()) {
       this.logger.warn(`SMTP not configured; skipped email to ${to}`);
@@ -465,6 +564,15 @@ export class NotificationsService {
         (stored) => this.storage.getObjectBuffer(stored),
         { publicUrlForKey: (key) => this.storage.objectPublicUrl(key) },
       );
+
+      const streakUpdate = this.isStreakUpdateType(meta?.type);
+      let weekDays: StreakWeekDay[] | undefined;
+      if (streakUpdate && meta?.userId) {
+        const today =
+          meta.todayYmd ?? new Date().toISOString().slice(0, 10);
+        weekDays = await this.weekDaysForUser(meta.userId, today);
+      }
+
       await this.mailService.sendAnnouncement({
         to,
         title,
@@ -472,6 +580,14 @@ export class NotificationsService {
         inlineImage,
         imageUrl,
         imageAlt: title,
+        ...(streakUpdate && weekDays?.length
+          ? {
+              variant: 'streak_update' as const,
+              weekDays,
+              footer: this.streakEmailFooter(meta?.type),
+              cta: { label: 'START A POMODORO', url: APP_LINK },
+            }
+          : {}),
       });
     } catch (err) {
       this.logger.error(

@@ -10,6 +10,7 @@ import { NotificationsService } from './notifications.service';
 import {
   daysBetweenYmd,
   localHourInTz,
+  localWeekdayInTz,
   normalizeTimezone,
   streakDateToYmd,
   todayInTz,
@@ -20,6 +21,9 @@ import { STREAK_GRACE_DAYS } from '../streaks/streak.constants';
 // 11 PM = 1 hour before midnight
 const STREAK_NUDGE_HOURS = new Set([21, 23]);
 const COMEBACK_HOUR = 10;
+/** Sunday morning weekly streak progress email (user local time). */
+const STREAK_UPDATE_HOUR = 10;
+const SUNDAY = 0;
 const MIN_SESSIONS_FOR_NUDGE = 5;
 /** Days since last focus before a comeback nudge (after grace has already ended). */
 const COMEBACK_DAYS = STREAK_GRACE_DAYS + 1;
@@ -67,6 +71,15 @@ export class NotificationScheduler {
           }, delayMs);
         }
 
+        if (
+          hour === STREAK_UPDATE_HOUR &&
+          localWeekdayInTz(tz) === SUNDAY
+        ) {
+          setTimeout(() => {
+            void this.maybeStreakUpdate(user.id, user.email, tz, today);
+          }, delayMs);
+        }
+
         const preferredHour = await this.preferredFocusHour(user.id, tz);
         const nudgeHour = preferredHour ?? 17;
         if (hour === nudgeHour) {
@@ -80,6 +93,33 @@ export class NotificationScheduler {
         );
       }
     }
+  }
+
+  private async maybeStreakUpdate(
+    userId: string,
+    email: string,
+    tz: string,
+    today: string,
+  ): Promise<void> {
+    const streak = await this.streakRepo.findOne({
+      where: { user: { id: userId } },
+    });
+    if (!streak || streak.current_streak <= 0) return;
+
+    const lastActive = streakDateToYmd(streak.last_active_date, tz);
+    if (!lastActive) return;
+
+    // Still in an active streak window (focused recently enough that grace hasn't expired).
+    const gap = daysBetweenYmd(lastActive, today);
+    if (gap > STREAK_GRACE_DAYS) return;
+
+    await this.notifications.notifyStreakUpdate(
+      userId,
+      streak.current_streak,
+      today,
+      email,
+      { today, streak: streak.current_streak },
+    );
   }
 
   private async maybeStreakAtRisk(
