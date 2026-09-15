@@ -609,11 +609,12 @@ export class NotificationsService {
         templateName = template.name;
         showProgress = this.templateShowProgress(template);
         showLeaderboard = this.templateShowLeaderboard(template);
-      } else if (templatesConfigured) {
-        throw new NotFoundException(
-          'No eligible template for this type and context',
-        );
       } else {
+        if (templatesConfigured) {
+          this.logger.warn(
+            `Test send: no eligible ${params.type} template for context; using fallback copy`,
+          );
+        }
         const copy = this.fallbackCopyForType(params.type, context);
         title = copy.title;
         body = copy.body;
@@ -636,15 +637,20 @@ export class NotificationsService {
 
     let emailSent = false;
     if (params.sendEmail !== false) {
-      await this.sendNudgeEmailInline(params.email, title, body, imageUrl, {
-        type: params.type,
-        userId: params.userId,
-        todayYmd:
-          typeof context.today === 'string' ? context.today : undefined,
-        showProgress,
-        showLeaderboard,
-      });
-      emailSent = this.mailService.isConfigured();
+      emailSent = await this.sendNudgeEmailInline(
+        params.email,
+        title,
+        body,
+        imageUrl,
+        {
+          type: params.type,
+          userId: params.userId,
+          todayYmd:
+            typeof context.today === 'string' ? context.today : undefined,
+          showProgress,
+          showLeaderboard,
+        },
+      );
     }
 
     return {
@@ -654,6 +660,7 @@ export class NotificationsService {
       source,
       templateName,
       emailSent,
+      emailConfigured: this.mailService.isConfigured(),
     };
   }
 
@@ -681,13 +688,12 @@ export class NotificationsService {
 
     let emailSent = false;
     if (params.sendEmail !== false) {
-      await this.sendNudgeEmailInline(
+      emailSent = await this.sendNudgeEmailInline(
         params.email,
         params.title,
         params.htmlBody ?? params.body,
         params.imageSource,
       );
-      emailSent = this.mailService.isConfigured();
     }
 
     return { notification, emailSent };
@@ -854,14 +860,19 @@ export class NotificationsService {
     userId: string,
     context: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    let next = { ...context };
-    if (!(typeof next.username === 'string' && next.username.trim())) {
-      const user = await this.userRepo.findOne({
-        where: { id: userId },
-        select: ['name', 'username'],
-      });
-      if (user) next = { ...next, username: greetingName(user) };
-    }
+    const next = { ...context };
+    // Always resolve from DB so templates never ship ", I've been waiting…"
+    // when the user clearly has a name (stale/empty context used to win).
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'name', 'username'],
+    });
+    const greeted = user ? greetingName(user) : '';
+    next.username =
+      greeted ||
+      (typeof next.username === 'string' && next.username.trim()
+        ? next.username.trim()
+        : 'friend');
     return this.withLeagueContext(userId, next);
   }
 
@@ -1073,9 +1084,24 @@ export class NotificationsService {
     },
   ): Promise<void> {
     if (!this.mailService.isConfigured()) {
-      this.logger.warn(`SMTP not configured; skipped email to ${to}`);
+      this.logger.error(
+        `SMTP not configured; skipped email to ${to}. Missing: ${this.mailService.missingConfigKeys().join(', ')}`,
+      );
       return;
     }
+
+    // Send inline. The notif-email BullMQ worker was a footgun: enqueue could
+    // succeed while nothing drained the queue, so in-app rows appeared and
+    // Resend stayed empty. Keep enqueue as best-effort backup only.
+    const sent = await this.sendNudgeEmailInline(
+      to,
+      title,
+      body,
+      imageSource,
+      meta,
+    );
+    if (sent) return;
+
     try {
       const enriched = await this.enrichEmailMeta(meta);
       await this.queue.enqueueSendEmail({
@@ -1086,11 +1112,13 @@ export class NotificationsService {
         imageSource,
         meta: enriched,
       });
-    } catch (err) {
       this.logger.warn(
-        `Email queue failed; sending inline: ${err instanceof Error ? err.message : err}`,
+        `Inline email failed for ${to}; enqueued to notif-email as fallback`,
       );
-      await this.sendNudgeEmailInline(to, title, body, imageSource, meta);
+    } catch (err) {
+      this.logger.error(
+        `Email inline + queue both failed for ${to}: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
@@ -1140,7 +1168,13 @@ export class NotificationsService {
       showProgress?: boolean;
       showLeaderboard?: boolean;
     },
-  ): Promise<void> {
+  ): Promise<boolean> {
+    if (!this.mailService.isConfigured()) {
+      this.logger.error(
+        `SMTP not configured; skipped email to ${to}. Missing: ${this.mailService.missingConfigKeys().join(', ')}`,
+      );
+      return false;
+    }
     try {
       const { inlineImage, imageUrl } = await resolveInlineEmailImage(
         imageSource,
@@ -1189,11 +1223,13 @@ export class NotificationsService {
             }
           : {}),
       });
+      return true;
     } catch (err) {
       this.logger.error(
         `Failed to email ${to}: ${title}`,
         err instanceof Error ? err.stack : String(err),
       );
+      return false;
     }
   }
 }

@@ -6,7 +6,18 @@ describe('PresenceService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PresenceService],
+      providers: [
+        PresenceService,
+        {
+          provide: 'REDIS_CLIENT',
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            del: jest.fn(),
+            expire: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     service = module.get<PresenceService>(PresenceService);

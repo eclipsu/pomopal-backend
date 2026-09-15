@@ -27,8 +27,16 @@ export function stripHtml(html: string): string {
     .trim();
 }
 
+function ctaHref(cta: NotificationCardCta): string {
+  return cta.url;
+}
+
 export function buildNotificationCardText(card: NotificationCard): string {
-  return [card.title, '', stripHtml(card.body)].join('\n');
+  const lines = [card.title, '', stripHtml(card.body)];
+  if (card.cta) {
+    lines.push('', `${card.cta.label}: ${ctaHref(card.cta)}`);
+  }
+  return lines.join('\n');
 }
 
 function isHtmlBody(body: string): boolean {
@@ -53,11 +61,13 @@ function bodyToHtml(body: string): string {
 
 export function buildNotificationCardHtml(card: NotificationCard): string {
   const preheader = card.preheader ?? stripHtml(card.body).slice(0, 100);
+  const safeTitle = escapeHtml(card.title);
+  const safeImageAlt = escapeHtml(card.imageAlt ?? '');
 
   const imageBlock = card.imageUrl
     ? `<tr>
         <td align="center" style="padding:0 0 32px 0;">
-          <img src="${card.imageUrl}" alt="${card.imageAlt ?? ''}"
+          <img src="${card.imageUrl}" alt="${safeImageAlt}"
                width="220" style="display:block;border:0;outline:none;text-decoration:none;max-width:100%;height:auto;">
         </td>
       </tr>`
@@ -66,12 +76,12 @@ export function buildNotificationCardHtml(card: NotificationCard): string {
   const ctaBlock = card.cta
     ? `<tr>
         <td align="center" style="padding:32px 0 0 0;">
-          <a href="${card.cta.url}"
+          <a href="${ctaHref(card.cta)}"
              style="display:inline-block;background:#e53e3e;color:#ffffff;
                     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
                     font-size:15px;font-weight:600;text-decoration:none;
                     padding:14px 32px;border-radius:8px;">
-            ${card.cta.label}
+            ${escapeHtml(card.cta.label)}
           </a>
         </td>
       </tr>`
@@ -86,7 +96,7 @@ export function buildNotificationCardHtml(card: NotificationCard): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="x-apple-disable-message-reformatting">
-  <title>${card.title}</title>
+  <title>${safeTitle}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f5;">
 
@@ -126,7 +136,7 @@ export function buildNotificationCardHtml(card: NotificationCard): string {
                   <td align="center" style="padding:0 0 16px 0;">
                     <h1 style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
                                font-size:26px;font-weight:700;color:#111827;line-height:1.25;">
-                      ${card.title}
+                      ${safeTitle}
                     </h1>
                   </td>
                 </tr>

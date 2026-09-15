@@ -258,7 +258,7 @@ async function main(): Promise<void> {
               title: content.title,
               body: content.body,
               imageUrl,
-              cta: link ? { label: ctaLabel, href: link } : undefined,
+              cta: link ? { label: ctaLabel, url: link } : undefined,
             });
             emailed += 1;
           } catch (err) {

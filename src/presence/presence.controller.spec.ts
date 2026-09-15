@@ -8,7 +8,7 @@ describe('PresenceController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [PresenceController],
-      providers: [PresenceService],
+      providers: [{ provide: PresenceService, useValue: {} }],
     }).compile();
 
     controller = module.get<PresenceController>(PresenceController);

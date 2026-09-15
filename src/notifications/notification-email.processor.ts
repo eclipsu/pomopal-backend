@@ -35,8 +35,11 @@ export class NotificationEmailProcessor extends WorkerHost {
     if (job.name !== JOB_SEND_EMAIL) return;
     const data = job.data;
     if (!this.mailService.isConfigured()) {
-      this.logger.warn(`SMTP not configured; skipped email to ${data.to}`);
-      return;
+      const missing = this.mailService.missingConfigKeys().join(', ');
+      this.logger.error(
+        `SMTP not configured; cannot email ${data.to}. Missing: ${missing}`,
+      );
+      throw new Error(`SMTP not configured (missing ${missing})`);
     }
 
     const { inlineImage, imageUrl } = await resolveInlineEmailImage(

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import {
@@ -14,7 +14,8 @@ interface FriendInviteOptions {
 }
 
 @Injectable()
-export class MailService {
+export class MailService implements OnModuleInit {
+  private readonly logger = new Logger(MailService.name);
   private transporter: nodemailer.Transporter;
 
   constructor(private readonly config: ConfigService) {
@@ -29,12 +30,34 @@ export class MailService {
     });
   }
 
+  onModuleInit(): void {
+    if (this.isConfigured()) {
+      this.logger.log(
+        `SMTP ready (${this.config.get<string>('SMTP_HOST')} → ${this.config.get<string>('SMTP_FROM')})`,
+      );
+      return;
+    }
+    const missing = (
+      ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'] as const
+    ).filter((key) => !this.config.get<string>(key));
+    this.logger.error(
+      `SMTP not configured — notification emails will NOT send. Missing: ${missing.join(', ') || 'unknown'}`,
+    );
+  }
+
   isConfigured(): boolean {
     return Boolean(
       this.config.get<string>('SMTP_HOST') &&
         this.config.get<string>('SMTP_USER') &&
         this.config.get<string>('SMTP_PASS') &&
         this.config.get<string>('SMTP_FROM'),
+    );
+  }
+
+  /** Which required SMTP env keys are empty (never logs secret values). */
+  missingConfigKeys(): string[] {
+    return (['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'] as const).filter(
+      (key) => !this.config.get<string>(key),
     );
   }
 

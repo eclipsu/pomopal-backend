@@ -29,10 +29,10 @@ describe('notification-card-email', () => {
     const html = buildNotificationCardHtml({
       title: 'Streak at risk',
       body: 'One pomodoro saves it.',
-      cta: { label: 'Start focus', href: 'https://pomopal.lol' },
+      cta: { label: 'Start focus', url: 'https://pomopal.lol/focus' },
     });
     expect(html).toContain('Start focus');
-    expect(html).toContain('href="https://pomopal.lol"');
+    expect(html).toContain('href="https://pomopal.lol/focus"');
   });
 
   it('escapes HTML in user content', () => {
@@ -48,7 +48,7 @@ describe('notification-card-email', () => {
     const text = buildNotificationCardText({
       title: 'Hi',
       body: 'Hello there',
-      cta: { label: 'Open', href: 'https://pomopal.lol' },
+      cta: { label: 'Open', url: 'https://pomopal.lol' },
     });
     expect(text).toContain('Hi');
     expect(text).toContain('Open: https://pomopal.lol');

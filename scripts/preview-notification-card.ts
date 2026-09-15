@@ -35,7 +35,7 @@ const html = buildNotificationCardHtml({
   body: args.body,
   imageUrl: args.image,
   imageAlt: args.title,
-  cta: args.link ? { label: args.cta, href: args.link } : undefined,
+  cta: args.link ? { label: args.cta, url: args.link } : undefined,
   preheader: args.body.slice(0, 100),
 });
 
