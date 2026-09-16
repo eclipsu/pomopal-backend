@@ -20,6 +20,7 @@ import { NotificationScheduleRunner } from './notification-schedule.runner';
 import { NotificationScheduleProcessor } from './notification-schedule.processor';
 import { NotificationEventsProcessor } from './notification-events.processor';
 import { NotificationEmailProcessor } from './notification-email.processor';
+import { NotificationScanCron } from './notification-scan.cron';
 
 @Module({
   imports: [
@@ -47,7 +48,13 @@ import { NotificationEmailProcessor } from './notification-email.processor';
     NotificationScheduleProcessor,
     NotificationEventsProcessor,
     NotificationEmailProcessor,
+    NotificationScanCron,
   ],
-  exports: [NotificationsService, TemplatePickerService, NotificationStatsService],
+  exports: [
+    NotificationsService,
+    TemplatePickerService,
+    NotificationStatsService,
+    NotificationScheduleRunner,
+  ],
 })
 export class NotificationsModule {}

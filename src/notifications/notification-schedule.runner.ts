@@ -4,22 +4,34 @@ import { Repository } from 'typeorm';
 import { Streak } from '../entities/streak.entity';
 import { Session, SessionType } from '../entities/sessions.entity';
 import { DailyStat } from '../entities/daily-stat.entity';
+import { User } from '../entities/user.entity';
 import { NotificationsService } from './notifications.service';
 import { NotificationStatsService } from './notification-stats.service';
 import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import {
   daysBetweenYmd,
+  localHourInTz,
+  localWeekdayInTz,
+  normalizeTimezone,
   streakDateToYmd,
+  todayInTz,
 } from '../common/time';
 import { STREAK_GRACE_DAYS } from '../streaks/streak.constants';
 import type { EvaluateUserJob } from './notification-jobs.types';
 
 const MIN_SESSIONS_FOR_NUDGE = 5;
 const COMEBACK_DAYS = STREAK_GRACE_DAYS + 1;
+const STREAK_NUDGE_HOURS = new Set([21, 23]);
+const COMEBACK_HOUR = 10;
+const STREAK_UPDATE_HOUR = 10;
+const WEEKLY_RANK_HOUR = 10;
+const SUNDAY = 0;
+const MONDAY = 1;
 
 @Injectable()
 export class NotificationScheduleRunner {
   private readonly logger = new Logger(NotificationScheduleRunner.name);
+  private scanInFlight = false;
 
   constructor(
     @InjectRepository(Streak)
@@ -28,10 +40,83 @@ export class NotificationScheduleRunner {
     private readonly sessionRepo: Repository<Session>,
     @InjectRepository(DailyStat)
     private readonly dailyStatRepo: Repository<DailyStat>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly notifications: NotificationsService,
     private readonly stats: NotificationStatsService,
     private readonly leaderboard: LeaderboardService,
   ) {}
+
+  /**
+   * Hourly retention sweep. Runs checks in-process (no BullMQ scheduler).
+   * The old upsertJobScheduler path got stuck and stopped firing.
+   */
+  async scanHour(): Promise<{ users: number; enqueued: number }> {
+    if (this.scanInFlight) {
+      this.logger.warn('scan-hour already running; skipping overlap');
+      return { users: 0, enqueued: 0 };
+    }
+    this.scanInFlight = true;
+    try {
+      const users = await this.userRepo.find({
+        select: ['id', 'email', 'time_zone'],
+      });
+      this.logger.log(`scan-hour: evaluating ${users.length} users`);
+      let enqueued = 0;
+
+      for (const user of users) {
+        const tz = normalizeTimezone(user.time_zone);
+        const hour = localHourInTz(tz);
+        const today = todayInTz(tz);
+        const weekday = localWeekdayInTz(tz);
+        const checks: EvaluateUserJob['checks'] = [];
+
+        if (STREAK_NUDGE_HOURS.has(hour)) {
+          checks.push('streak_at_risk');
+        }
+        if (hour === COMEBACK_HOUR) {
+          checks.push('comeback');
+        }
+        if (hour === STREAK_UPDATE_HOUR && weekday === SUNDAY) {
+          checks.push('streak_update');
+        }
+        if (hour === WEEKLY_RANK_HOUR && weekday === MONDAY) {
+          checks.push('weekly_rank');
+        }
+
+        const preferred = await this.preferredFocusHour(user.id, tz);
+        if (hour === (preferred ?? 17)) {
+          checks.push('daily_nudge');
+        }
+
+        if (checks.length === 0) continue;
+
+        try {
+          await this.evaluateUser({
+            v: 1,
+            userId: user.id,
+            email: user.email,
+            tz,
+            today,
+            hour,
+            checks,
+          });
+          enqueued += 1;
+        } catch (err) {
+          this.logger.warn(
+            `evaluate failed ${user.id}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
+
+      this.logger.log(
+        `scan-hour done: ${enqueued}/${users.length} users had checks`,
+      );
+      return { users: users.length, enqueued };
+    } finally {
+      this.scanInFlight = false;
+    }
+  }
 
   async evaluateUser(job: EvaluateUserJob): Promise<void> {
     for (const check of job.checks) {

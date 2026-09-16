@@ -26,6 +26,11 @@ export class AdminController {
     return this.admin.testSend(dto);
   }
 
+  @Post('run-notification-scan')
+  runNotificationScan() {
+    return this.admin.runNotificationScan();
+  }
+
   @Post('revive-streak')
   reviveStreak(@Body() dto: ReviveStreakDto) {
     return this.admin.reviveStreak(dto);

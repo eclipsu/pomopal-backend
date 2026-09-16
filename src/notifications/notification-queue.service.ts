@@ -4,7 +4,6 @@ import { Queue } from 'bullmq';
 import {
   JOB_EVALUATE_USER,
   JOB_POMODORO_COMPLETED,
-  JOB_SCAN_HOUR,
   JOB_SEND_EMAIL,
   QUEUE_EMAIL,
   QUEUE_EVENTS,
@@ -32,19 +31,11 @@ export class NotificationQueueService implements OnModuleInit {
       this.logger.warn('Notification workers disabled via env');
       return;
     }
-    await this.scheduleQueue.upsertJobScheduler(
-      'notif-scan-hour',
-      { pattern: '0 * * * *' },
-      {
-        name: JOB_SCAN_HOUR,
-        data: { v: 1 },
-        opts: {
-          removeOnComplete: 50,
-          removeOnFail: 100,
-        },
-      },
+    // Hourly scan is driven by Nest @Cron (NotificationScanCron).
+    // BullMQ upsertJobScheduler was getting stuck with a next-run in the past.
+    this.logger.log(
+      'Notification schedule ready (Nest cron owns scan-hour; queue for events/email)',
     );
-    this.logger.log('Registered repeatable scan-hour job');
   }
 
   async enqueueEvaluateUser(job: EvaluateUserJob): Promise<void> {

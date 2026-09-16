@@ -10,6 +10,7 @@ import { User } from '../entities/user.entity';
 import { Notification } from '../entities/notification.entity';
 import { NotificationPreferences } from '../entities/notification-preferences.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationScheduleRunner } from '../notifications/notification-schedule.runner';
 import { StreaksService } from '../streaks/streaks.service';
 import { TemplatePickerService } from '../notifications/template-picker.service';
 import { StorageService } from '../storage/storage.service';
@@ -37,6 +38,7 @@ export class AdminService {
     @InjectRepository(NotificationPreferences)
     private readonly prefsRepo: Repository<NotificationPreferences>,
     private readonly notifications: NotificationsService,
+    private readonly scheduleRunner: NotificationScheduleRunner,
     private readonly streaks: StreaksService,
     private readonly templatePicker: TemplatePickerService,
     private readonly storage: StorageService,
@@ -71,6 +73,11 @@ export class AdminService {
 
     const eligibility = await this.streaks.getReviveEligibility(userId);
     return { user, ...eligibility };
+  }
+
+  /** Manually trigger the hourly retention scan (same as Nest cron). */
+  async runNotificationScan() {
+    return this.scheduleRunner.scanHour();
   }
 
   async testSend(dto: TestSendNotificationDto) {
