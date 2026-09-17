@@ -27,7 +27,7 @@ import {
 } from './notification-copy';
 import { MailService } from '../mail/mail.service';
 import { TemplatePickerService } from './template-picker.service';
-import { renderTemplate } from './template-render';
+import { renderPlainTemplate } from './template-render';
 import { StorageService } from '../storage/storage.service';
 import { resolveInlineEmailImage } from '../mail/email-inline-image';
 import { stripHtml } from '../mail/notification-card-email';
@@ -586,8 +586,8 @@ export class NotificationsService {
     if (params.templateId) {
       const template = await this.templatePicker.findById(params.templateId);
       if (!template) throw new NotFoundException('Template not found');
-      title = renderTemplate(template.title, context);
-      body = renderTemplate(template.body, context);
+      title = renderPlainTemplate(template.title, context);
+      body = renderPlainTemplate(template.body, context);
       imageUrl = template.image_url ?? imageUrl;
       source = 'template';
       templateName = template.name;
@@ -602,8 +602,8 @@ export class NotificationsService {
         context,
       );
       if (template) {
-        title = renderTemplate(template.title, context);
-        body = renderTemplate(template.body, context);
+        title = renderPlainTemplate(template.title, context);
+        body = renderPlainTemplate(template.body, context);
         imageUrl = template.image_url ?? imageUrl;
         source = 'template';
         templateName = template.name;
@@ -815,8 +815,8 @@ export class NotificationsService {
     );
 
     if (template) {
-      title = renderTemplate(template.title, context);
-      body = renderTemplate(template.body, context);
+      title = renderPlainTemplate(template.title, context);
+      body = renderPlainTemplate(template.body, context);
       imageUrl = template.image_url ?? params.fallbackImage;
       showProgress = this.templateShowProgress(template);
       showLeaderboard = this.templateShowLeaderboard(template);

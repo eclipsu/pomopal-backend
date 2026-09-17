@@ -1,4 +1,8 @@
-import { evalCondition, renderTemplate } from './template-render';
+import {
+  evalCondition,
+  renderPlainTemplate,
+  renderTemplate,
+} from './template-render';
 
 describe('renderTemplate', () => {
   it('substitutes context variables', () => {
@@ -100,6 +104,24 @@ describe('renderTemplate', () => {
         { streak: 9, __randomIndex: 0 },
       ),
     ).toBe('hi');
+  });
+
+  it('renderPlainTemplate strips rich-text tags before randomize', () => {
+    expect(
+      renderPlainTemplate(
+        '<p>hey you</p><p>{{randomize{alpha|beta|gamma}}}</p>',
+        { __randomIndex: 1 },
+      ),
+    ).toBe('hey you\nbeta');
+  });
+
+  it('renderPlainTemplate survives tags splitting the token', () => {
+    expect(
+      renderPlainTemplate(
+        'hey you<br>{{randomize{are you gonna study today??|<b>lock in</b>|you good?}}}',
+        { __randomIndex: 0 },
+      ),
+    ).toBe('hey you\nare you gonna study today??');
   });
 });
 

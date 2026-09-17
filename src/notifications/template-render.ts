@@ -309,10 +309,39 @@ function renderVars(text: string, context: Record<string, unknown>): string {
   });
 }
 
+/**
+ * Rich-text bodies often wrap/split tokens with tags, which breaks
+ * {{randomize{…}}} / {{#if}} matching. Strip to plain text first.
+ */
+export function stripTemplateHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function renderTemplate(
   text: string,
   context: Record<string, unknown>,
 ): string {
   if (!text) return '';
   return renderVars(renderBlocks(text, context), context);
+}
+
+/** For notification templates (rich-text body → plain email). */
+export function renderPlainTemplate(
+  text: string,
+  context: Record<string, unknown>,
+): string {
+  return renderTemplate(stripTemplateHtml(text ?? ''), context);
 }
