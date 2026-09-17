@@ -197,17 +197,19 @@ export function buildStreakUpdateEmailText(card: StreakUpdateCard): string {
   const days = (card.weekDays ?? [])
     .map((d) => `${d.label}:${d.completed ? 'done' : d.isToday ? 'today' : '-'}`)
     .join(' ');
+  const progress =
+    card.weekDays?.length > 0
+      ? ['', 'Your weekly progress', days]
+      : [];
   return [
     card.title,
     card.body ?? '',
-    '',
-    'Your weekly progress',
-    days,
+    ...progress,
     '',
     card.footer ?? 'Keep your streak alive with a pomodoro!',
     card.ctaUrl ? `${card.ctaLabel ?? 'Start a pomodoro'}: ${card.ctaUrl}` : '',
   ]
-    .filter(Boolean)
+    .filter((line) => line !== undefined && line !== null)
     .join('\n');
 }
 

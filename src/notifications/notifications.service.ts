@@ -876,28 +876,30 @@ export class NotificationsService {
     return this.withLeagueContext(userId, next);
   }
 
-  /** Streak emails use plain text — strip rich-editor font tags. */
+  /** Flat emails use plain text — strip rich-editor font tags. */
   private normalizeCopy(
-    type: NotificationType,
+    _type: NotificationType,
     title: string,
     body: string,
   ): { title: string; body: string } {
-    if (
-      !this.isStreakUpdateType(type) &&
-      !this.isLeaderboardType(type) &&
-      type !== 'daily_nudge' &&
-      type !== 'comeback'
-    ) {
-      return { title, body };
-    }
     return {
       title: stripHtml(title) || title,
       body: stripHtml(body) || body,
     };
   }
 
+  private supportsWeeklyProgress(type?: NotificationType): boolean {
+    return (
+      type === 'streak_update' ||
+      type === 'streak_at_risk' ||
+      type === 'streak_milestone' ||
+      type === 'daily_nudge' ||
+      type === 'comeback'
+    );
+  }
+
   private defaultShowProgress(type: NotificationType): boolean {
-    return this.isStreakUpdateType(type);
+    return this.supportsWeeklyProgress(type);
   }
 
   private defaultShowLeaderboard(type: NotificationType): boolean {
@@ -944,6 +946,47 @@ export class NotificationsService {
       return 'One more pomodoro can flip the board again.';
     }
     return 'Climb the board with another pomodoro!';
+  }
+
+  private flatEmailFooter(type?: NotificationType): string {
+    if (type === 'streak_milestone') {
+      return "You're on fire — keep it going tomorrow!";
+    }
+    if (type === 'streak_update') {
+      return 'Keep your streak alive with a pomodoro!';
+    }
+    if (type === 'daily_nudge') {
+      return 'A short focus session is enough to get back into rhythm.';
+    }
+    if (type === 'comeback') {
+      return "We're glad you're here — start with one pomodoro.";
+    }
+    if (type === 'announcement') {
+      return 'Thanks for being part of pomopal.';
+    }
+    return 'Save your streak with a pomodoro!';
+  }
+
+  private flatEmailCta(type?: NotificationType): { label: string; url: string } {
+    if (this.isLeaderboardType(type)) {
+      return { label: 'VIEW LEADERBOARD', url: APP_LINK };
+    }
+    if (type === 'announcement') {
+      return { label: 'OPEN POMOPAL', url: APP_LINK };
+    }
+    return { label: 'START A POMODORO', url: APP_LINK };
+  }
+
+  /** Postgres `date` columns often hydrate as Date — normalize to YYYY-MM-DD. */
+  private statDateKey(date: string | Date): string {
+    if (typeof date === 'string') return date.slice(0, 10);
+    if (date instanceof Date && !Number.isNaN(date.getTime())) {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return String(date).slice(0, 10);
   }
 
   private async buildLeaderboardRowsForUser(
@@ -1056,18 +1099,12 @@ export class NotificationsService {
     });
     const completed = rows
       .filter((r) => r.session_count > 0)
-      .map((r) => r.date);
+      .map((r) => this.statDateKey(r.date as string | Date));
     return buildWeekDaysFromStats(todayYmd, completed);
   }
 
   private streakEmailFooter(type?: NotificationType): string {
-    if (type === 'streak_milestone') {
-      return "You're on fire — keep it going tomorrow!";
-    }
-    if (type === 'streak_update') {
-      return 'Keep your streak alive with a pomodoro!';
-    }
-    return 'Save your streak with a pomodoro!';
+    return this.flatEmailFooter(type);
   }
 
   private async sendNudgeEmail(
@@ -1182,13 +1219,13 @@ export class NotificationsService {
         { publicUrlForKey: (key) => this.storage.objectPublicUrl(key) },
       );
 
-      const streakUpdate = this.isStreakUpdateType(meta?.type);
       const leaderboard = this.isLeaderboardType(meta?.type);
-      const includeProgress = meta?.showProgress !== false;
+      const includeProgress =
+        this.supportsWeeklyProgress(meta?.type) && meta?.showProgress !== false;
       const includeBoard = meta?.showLeaderboard !== false;
 
       let weekDays: StreakWeekDay[] = [];
-      if (streakUpdate && includeProgress && meta?.userId) {
+      if (includeProgress && meta?.userId) {
         const today =
           meta.todayYmd ?? new Date().toISOString().slice(0, 10);
         weekDays = await this.weekDaysForUser(meta.userId, today);
@@ -1206,22 +1243,19 @@ export class NotificationsService {
         inlineImage,
         imageUrl,
         imageAlt: title,
-        ...(streakUpdate
-          ? {
-              variant: 'streak_update' as const,
-              weekDays,
-              footer: this.streakEmailFooter(meta?.type),
-              cta: { label: 'START A POMODORO', url: APP_LINK },
-            }
-          : {}),
         ...(leaderboard
           ? {
               variant: 'leaderboard' as const,
               leaderboardRows: includeBoard ? leaderboardRows : [],
               footer: this.leaderboardEmailFooter(meta?.type),
-              cta: { label: 'VIEW LEADERBOARD', url: APP_LINK },
+              cta: this.flatEmailCta(meta?.type),
             }
-          : {}),
+          : {
+              variant: 'streak_update' as const,
+              weekDays,
+              footer: this.flatEmailFooter(meta?.type),
+              cta: this.flatEmailCta(meta?.type),
+            }),
       });
       return true;
     } catch (err) {

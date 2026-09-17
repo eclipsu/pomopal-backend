@@ -18,6 +18,62 @@ import type { SendEmailJob } from './notification-jobs.types';
 import { APP_LINK } from './notification-copy';
 import type { NotificationType } from '../entities/notification.entity';
 
+function supportsWeeklyProgress(type?: NotificationType): boolean {
+  return (
+    type === 'streak_update' ||
+    type === 'streak_at_risk' ||
+    type === 'streak_milestone' ||
+    type === 'daily_nudge' ||
+    type === 'comeback'
+  );
+}
+
+function isLeaderboardType(type?: NotificationType): boolean {
+  return (
+    type === 'weekly_rank' || type === 'rank_passed' || type === 'global_top'
+  );
+}
+
+function flatEmailFooter(type?: NotificationType): string {
+  if (type === 'streak_milestone') {
+    return "You're on fire — keep it going tomorrow!";
+  }
+  if (type === 'streak_update') {
+    return 'Keep your streak alive with a pomodoro!';
+  }
+  if (type === 'daily_nudge') {
+    return 'A short focus session is enough to get back into rhythm.';
+  }
+  if (type === 'comeback') {
+    return "We're glad you're here — start with one pomodoro.";
+  }
+  if (type === 'announcement') {
+    return 'Thanks for being part of pomopal.';
+  }
+  return 'Save your streak with a pomodoro!';
+}
+
+function flatEmailCta(type?: NotificationType): { label: string; url: string } {
+  if (isLeaderboardType(type)) {
+    return { label: 'VIEW LEADERBOARD', url: APP_LINK };
+  }
+  if (type === 'announcement') {
+    return { label: 'OPEN POMOPAL', url: APP_LINK };
+  }
+  return { label: 'START A POMODORO', url: APP_LINK };
+}
+
+function statDateKey(date: string | Date): string {
+  if (typeof date === 'string') return date.slice(0, 10);
+  if (date instanceof Date && !Number.isNaN(date.getTime())) {
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return String(date).slice(0, 10);
+}
+
 @Processor(QUEUE_EMAIL)
 export class NotificationEmailProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationEmailProcessor.name);
@@ -49,24 +105,18 @@ export class NotificationEmailProcessor extends WorkerHost {
     );
 
     const type = data.meta?.type as NotificationType | undefined;
-    const streakUpdate =
-      type === 'streak_update' ||
-      type === 'streak_at_risk' ||
-      type === 'streak_milestone';
-    const leaderboard =
-      type === 'weekly_rank' ||
-      type === 'rank_passed' ||
-      type === 'global_top';
+    const leaderboard = isLeaderboardType(type);
+    const includeProgress =
+      supportsWeeklyProgress(type) && data.meta?.showProgress !== false;
+    const includeBoard = data.meta?.showLeaderboard !== false;
 
     let weekDays: StreakWeekDay[] = [];
-    const includeProgress = data.meta?.showProgress !== false;
-    if (streakUpdate && includeProgress && data.meta?.userId) {
+    if (includeProgress && data.meta?.userId) {
       const today =
         data.meta.todayYmd ?? new Date().toISOString().slice(0, 10);
       weekDays = await this.weekDaysForUser(data.meta.userId, today);
     }
 
-    const includeBoard = data.meta?.showLeaderboard !== false;
     const leaderboardRows = (data.meta?.leaderboardRows ??
       []) as LeaderboardEmailRow[];
 
@@ -77,19 +127,6 @@ export class NotificationEmailProcessor extends WorkerHost {
       inlineImage,
       imageUrl,
       imageAlt: data.title,
-      ...(streakUpdate
-        ? {
-            variant: 'streak_update' as const,
-            weekDays,
-            footer:
-              type === 'streak_milestone'
-                ? "You're on fire — keep it going tomorrow!"
-                : type === 'streak_update'
-                  ? 'Keep your streak alive with a pomodoro!'
-                  : 'Save your streak with a pomodoro!',
-            cta: { label: 'START A POMODORO', url: APP_LINK },
-          }
-        : {}),
       ...(leaderboard
         ? {
             variant: 'leaderboard' as const,
@@ -100,9 +137,14 @@ export class NotificationEmailProcessor extends WorkerHost {
                 : type === 'rank_passed'
                   ? 'One more pomodoro can flip the board again.'
                   : 'Climb the board with another pomodoro!',
-            cta: { label: 'VIEW LEADERBOARD', url: APP_LINK },
+            cta: flatEmailCta(type),
           }
-        : {}),
+        : {
+            variant: 'streak_update' as const,
+            weekDays,
+            footer: flatEmailFooter(type),
+            cta: flatEmailCta(type),
+          }),
     });
   }
 
@@ -120,7 +162,7 @@ export class NotificationEmailProcessor extends WorkerHost {
     });
     const completed = rows
       .filter((r) => r.session_count > 0)
-      .map((r) => r.date);
+      .map((r) => statDateKey(r.date as string | Date));
     return buildWeekDaysFromStats(todayYmd, completed);
   }
 }

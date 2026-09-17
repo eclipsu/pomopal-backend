@@ -1,9 +1,5 @@
 import * as nodemailer from 'nodemailer';
-import {
-  buildNotificationCardHtml,
-  buildNotificationCardText,
-  NotificationCardCta,
-} from './notification-card-email';
+import { NotificationCardCta } from './notification-card-email';
 import {
   buildStreakUpdateEmailHtml,
   buildStreakUpdateEmailText,
@@ -41,8 +37,8 @@ export interface SendAnnouncementOptions {
   inlineImage?: InlineEmailImage;
   cta?: NotificationCardCta;
   preheader?: string;
-  /** Streak email layout (logo, CTA, optional weekly progress). */
-  variant?: 'card' | 'streak_update' | 'leaderboard';
+  /** Flat Duo-style layout by default; leaderboard for league mail. Cards removed. */
+  variant?: 'streak_update' | 'leaderboard';
   weekDays?: StreakWeekDay[];
   leaderboardRows?: LeaderboardEmailRow[];
   boardTitle?: string;
@@ -75,27 +71,12 @@ export async function sendAnnouncementEmail(
     ? `cid:${NOTIFICATION_IMAGE_CID}`
     : imageUrl;
 
-  const useStreak = opts.variant === 'streak_update';
   const useLeaderboard = opts.variant === 'leaderboard';
 
   let html: string;
   let text: string;
 
-  if (useStreak) {
-    const streakCard = {
-      title: opts.title,
-      body: opts.body ?? undefined,
-      imageUrl: resolvedImageUrl,
-      imageAlt: opts.imageAlt,
-      ctaLabel: opts.cta?.label,
-      ctaUrl: opts.cta?.url,
-      weekDays: opts.weekDays ?? [],
-      footer: opts.footer,
-      preheader: opts.preheader,
-    };
-    html = buildStreakUpdateEmailHtml(streakCard);
-    text = buildStreakUpdateEmailText(streakCard);
-  } else if (useLeaderboard) {
+  if (useLeaderboard) {
     const boardCard = {
       title: opts.title,
       body: opts.body ?? undefined,
@@ -111,16 +92,19 @@ export async function sendAnnouncementEmail(
     html = buildLeaderboardEmailHtml(boardCard);
     text = buildLeaderboardEmailText(boardCard);
   } else {
-    const card = {
+    const streakCard = {
       title: opts.title,
-      body: opts.body ?? '',
+      body: opts.body ?? undefined,
       imageUrl: resolvedImageUrl,
       imageAlt: opts.imageAlt,
-      cta: opts.cta,
+      ctaLabel: opts.cta?.label ?? 'OPEN POMOPAL',
+      ctaUrl: opts.cta?.url ?? 'https://pomopal.lol',
+      weekDays: opts.weekDays ?? [],
+      footer: opts.footer,
       preheader: opts.preheader,
     };
-    html = buildNotificationCardHtml(card);
-    text = buildNotificationCardText(card);
+    html = buildStreakUpdateEmailHtml(streakCard);
+    text = buildStreakUpdateEmailText(streakCard);
   }
 
   const attachments = inlineImage
@@ -144,4 +128,3 @@ export async function sendAnnouncementEmail(
     attachments,
   });
 }
-
